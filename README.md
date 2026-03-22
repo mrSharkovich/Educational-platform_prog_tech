@@ -23,16 +23,18 @@
 
 **Требования:** Python 3.10+, pip
 
+
+#### 1. Распаковать проект
+
+#### 2. Установить зависимости
 ```bash
-# 1. Распаковать проект
-cd edu_platform
-
-# 2. Установить зависимости
-cd backend
 pip install -r requirements.txt
+```
 
-# 3. Запустить
-python app.py
+#### 3. Запустить
+
+```bash
+python src\backend\app.py
 ```
 
 Приложение доступно по адресу: **http://localhost:5000**
