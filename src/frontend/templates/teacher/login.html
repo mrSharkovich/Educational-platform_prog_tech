@@ -1,0 +1,68 @@
+{% extends "teacher/base.html" %}
+{% block title %}Вход для преподавателя — EduPath{% endblock %}
+{% block navbar %}{% endblock %}
+
+{% block body %}
+<div class="teacher-auth-page">
+  <div class="teacher-auth-box">
+    <div class="auth-logo">
+            <a href="/" style="display:inline-block;">
+        <span style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;letter-spacing:-.03em;color:#111827;">Edu<span style="color:#0d9488;">Path</span></span>
+      </a>
+      <p>Портал преподавателя</p>
+    </div>
+
+    <div style="display:flex;justify-content:center;margin-bottom:20px;">
+      <span class="teacher-badge" style="font-size:.8rem;padding:5px 14px;">Преподаватель</span>
+    </div>
+
+    <h1 class="auth-title">Добро пожаловать</h1>
+    <p class="auth-sub">Войдите в кабинет преподавателя</p>
+
+    <div class="error-banner" id="error-banner"></div>
+
+    <form class="auth-form" id="loginForm">
+      <div class="field">
+        <label>Логин</label>
+        <input type="text" id="username" placeholder="Ваш логин" required>
+      </div>
+      <div class="field">
+        <label>Пароль</label>
+        <input type="password" id="password" placeholder="••••••••" required>
+      </div>
+      <button type="submit" class="btn btn-teal btn-full" id="submitBtn">Войти</button>
+    </form>
+
+    <p class="auth-footer">
+      Нет аккаунта? <a href="/teacher/register" style="color:#0d9488;">Зарегистрироваться</a>
+    </p>
+    <p class="auth-footer" style="margin-top:6px;">
+      Вы студент? <a href="/login">Вход для студентов</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('error-banner');
+  err.style.display = 'none';
+  btnLoad(btn, true);
+  const res = await api.post('/api/teacher/login', {
+    username: document.getElementById('username').value,
+    password: document.getElementById('password').value
+  });
+  if (res.success) {
+    toast('Добро пожаловать!', 'success');
+    setTimeout(() => window.location = '/teacher/dashboard', 400);
+  } else {
+    err.textContent = res.error || 'Ошибка входа';
+    err.style.display = 'block';
+    btnLoad(btn, false);
+  }
+});
+</script>
+{% endblock %}

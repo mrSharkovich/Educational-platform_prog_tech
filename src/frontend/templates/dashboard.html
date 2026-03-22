@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Мои курсы — EduPath{% endblock %}
+
+{% block body %}
+<div class="app-layout">
+  <div class="dashboard-page">
+
+    <!-- Header -->
+    <div class="page-header">
+      <h1>Привет, {{ user['first_name'] }} 👋</h1>
+      <p>Продолжай обучение — прогресс сохранён</p>
+    </div>
+
+    <!-- Stats row (populated via JS) -->
+    <div class="stats-row" id="statsRow">
+      <div class="stat-card">
+        <div class="stat-icon accent">📚</div>
+        <div>
+          <div class="stat-val" id="statCourses">{{ courses | length }}</div>
+          <div class="stat-label">Доступных курсов</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div>
+          <div class="stat-val" id="statCompleted">—</div>
+          <div class="stat-label">Заданий завершено</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Courses -->
+    <div class="page-header">
+      <h2 style="font-size:1.3rem;">Мои курсы</h2>
+    </div>
+
+    {% if courses %}
+    <div class="courses-grid">
+      {% for course in courses %}
+      <a href="/course/{{ course['id'] }}" class="course-card fade-up" data-course-id="{{ course['id'] }}">
+        <div class="course-icon">📖</div>
+        <h3>{{ course['title'] }}</h3>
+        <div>
+          <div class="course-progress-label" style="margin-bottom:8px;">Прогресс</div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:0%" data-course="{{ course['id'] }}"></div>
+          </div>
+        </div>
+        <div class="course-meta">
+          <span class="badge badge-accent" id="progress-label-{{ course['id'] }}">Загрузка...</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state card">
+      <div class="empty-icon">🎓</div>
+      <h3 style="margin-bottom:8px;">Курсов пока нет</h3>
+      <p>Скоро здесь появятся доступные для вас курсы.</p>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async () => {
+  // Load overall completed count
+  const overall = await api.get('/api/user/progress');
+  document.getElementById('statCompleted').textContent = overall.completed_lessons ?? 0;
+
+  // Load per-course progress
+  const courseIds = [...document.querySelectorAll('[data-course-id]')]
+    .map(el => el.dataset.courseId);
+
+  for (const id of courseIds) {
+    const data = await api.get(`/api/user/progress?course_id=${id}`);
+    const fill  = document.querySelector(`.progress-fill[data-course="${id}"]`);
+    const label = document.getElementById(`progress-label-${id}`);
+    if (fill)  fill.style.width = (data.progress ?? 0) + '%';
+    if (label) {
+      const p = data.progress ?? 0;
+      label.textContent = p === 100 ? '✓ Завершён' : `${p}% пройдено`;
+      if (p === 100) { label.className = 'badge badge-green'; }
+    }
+  }
+})();
+</script>
+{% endblock %}

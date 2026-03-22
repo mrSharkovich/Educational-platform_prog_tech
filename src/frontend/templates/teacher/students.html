@@ -1,0 +1,140 @@
+{% extends "teacher/base.html" %}
+{% block title %}Мои студенты — EduPath{% endblock %}
+
+{% block body %}
+<div style="padding-top:var(--nav-h);">
+<div class="t-page">
+
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+    <div>
+      <h1>Мои студенты</h1>
+      <p style="color:var(--mid);margin-top:4px;">Все студенты, записанные на ваши курсы</p>
+    </div>
+  </div>
+
+  <div style="margin:20px 0 16px;">
+    <input type="text" id="searchInput" placeholder="Поиск по имени, логину или курсу..."
+      style="width:100%;max-width:440px;padding:9px 14px;border:1px solid var(--border);
+             border-radius:var(--r-sm);background:var(--surface);color:var(--ink);
+             font-size:.9rem;outline:none;"
+      oninput="filterStudents(this.value)">
+  </div>
+
+  <div class="stats-row" style="margin:0 0 28px;">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(79,110,247,.1);">👥</div>
+      <div>
+        <div class="stat-val" id="totalCount">—</div>
+        <div class="stat-label">Всего студентов</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(13,148,136,.1);">📚</div>
+      <div>
+        <div class="stat-val" id="courseCount">—</div>
+        <div class="stat-label">Курсов с записью</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="studentsContent">
+    <div class="loading-pulse">
+      <div class="skel" style="height:56px;border-radius:8px;"></div>
+      <div class="skel" style="height:56px;border-radius:8px;opacity:.7;margin-top:10px;"></div>
+      <div class="skel" style="height:56px;border-radius:8px;opacity:.4;margin-top:10px;"></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<style>
+.student-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px 20px;
+  margin-bottom: 12px;
+  transition: box-shadow .15s;
+}
+.student-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+.student-identity { font-size: 1rem; font-weight: 600; color: var(--ink); }
+.student-identity .login { font-weight: 400; color: var(--mid); font-size: .88rem; }
+.course-list { margin-top: 10px; padding-left: 28px; display: flex; flex-direction: column; gap: 6px; }
+.course-list-label { font-size: .78rem; color: var(--mid); text-transform: uppercase;
+  letter-spacing: .04em; margin-bottom: 4px; font-weight: 600; }
+.course-row { display: flex; align-items: center; gap: 10px; font-size: .88rem; }
+.course-row .cnum { color: var(--mid); min-width: 18px; font-size: .8rem; }
+.course-row .ctitle { color: var(--ink); text-decoration: none; flex: 1; }
+.course-row .ctitle:hover { color: #0d9488; text-decoration: underline; }
+.course-row .cprog { font-size: .78rem; font-weight: 600; color: #0d9488; white-space: nowrap; }
+.course-row .mini-bar { width: 80px; height: 6px; background: var(--border);
+  border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+.course-row .mini-fill { height: 100%; background: #0d9488; border-radius: 3px; transition: width .3s; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allStudents = [];
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderStudents(list) {
+  const el = document.getElementById('studentsContent');
+  if (!list.length) {
+    el.innerHTML = '<div class="t-empty card"><div class="t-empty-icon">👥</div><p>Студентов не найдено</p></div>';
+    return;
+  }
+
+  el.innerHTML = list.map((s, idx) => {
+    const courseRows = s.courses.map((c, ci) =>
+      '<div class="course-row">' +
+        '<span class="cnum">' + (ci+1) + '.</span>' +
+        '<a class="ctitle" href="/teacher/course/' + c.id + '">' + escHtml(c.title) + '</a>' +
+        '<div class="mini-bar"><div class="mini-fill" style="width:' + c.progress + '%"></div></div>' +
+        '<span class="cprog">' + c.progress + '%</span>' +
+      '</div>'
+    ).join('');
+
+    return '<div class="student-card">' +
+      '<div style="display:flex;align-items:baseline;gap:8px;">' +
+        '<span style="min-width:24px;font-weight:700;color:#0d9488;">' + (idx+1) + '.</span>' +
+        '<span class="student-identity">' +
+          '<span class="login">@' + escHtml(s.login) + '</span>' +
+          '&nbsp;&mdash;&nbsp;' +
+          escHtml(s.first_name) + ' ' + escHtml(s.last_name) +
+        '</span>' +
+      '</div>' +
+      '<div class="course-list">' +
+        '<div class="course-list-label">Список курсов:</div>' +
+        courseRows +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function filterStudents(query) {
+  const q = query.toLowerCase().trim();
+  if (!q) { renderStudents(allStudents); return; }
+  const filtered = allStudents.filter(s =>
+    s.login.toLowerCase().includes(q) ||
+    s.first_name.toLowerCase().includes(q) ||
+    s.last_name.toLowerCase().includes(q) ||
+    s.courses.some(c => c.title.toLowerCase().includes(q))
+  );
+  renderStudents(filtered);
+}
+
+(async () => {
+  allStudents = await api.get('/api/teacher/students');
+  const courseIds = new Set();
+  allStudents.forEach(s => s.courses.forEach(c => courseIds.add(c.id)));
+  document.getElementById('totalCount').textContent = allStudents.length;
+  document.getElementById('courseCount').textContent = courseIds.size;
+  renderStudents(allStudents);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}EduPath — Образовательная платформа{% endblock %}
+
+{% block body %}
+<main>
+  <section class="hero">
+    <div class="hero-eyebrow">Образовательная платформа нового поколения</div>
+    <h1 class="fade-up">Учись быстрее.<br><em>Расти</em> увереннее.</h1>
+    <p class="hero-sub fade-up fade-up-1">
+      Структурированные курсы, практические задания и обратная связь от преподавателей — всё в одном месте.
+    </p>
+    <div class="hero-cta fade-up fade-up-2">
+      {% if g.user %}
+        <a href="/register" class="btn btn-primary btn-lg" onclick="return confirmLeave(event, '/register')">Начать учёбу →</a>
+        <a href="/login"    class="btn btn-ghost btn-lg"   onclick="return confirmLeave(event, '/login')">Войти</a>
+      {% else %}
+        <a href="/register" class="btn btn-primary btn-lg">Начать учёбу →</a>
+        <a href="/login"    class="btn btn-ghost btn-lg">Войти</a>
+      {% endif %}
+    </div>
+    <div style="margin-top:16px;" class="fade-up fade-up-3">
+      {% if g.user %}
+        <a href="/teacher/login" style="font-size:.85rem;color:var(--mid);"
+           onclick="return confirmLeave(event, '/teacher/login')">Вход для преподавателей →</a>
+      {% else %}
+        <a href="/teacher/login" style="font-size:.85rem;color:var(--mid);">Вход для преподавателей →</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="features-section">
+    <div>
+      <div class="section-eyebrow">Почему EduPath</div>
+      <h2 class="section-title-lg">Всё для эффективного обучения</h2>
+      <p class="section-sub">Продуманная структура курсов и интерактивные инструменты для студентов и преподавателей.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card fade-up">
+        <div class="feature-icon">📚</div>
+        <h3>Структурированные курсы</h3>
+        <p>Блоки → уроки и задания. Прогресс сохраняется автоматически.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-1">
+        <div class="feature-icon">✏️</div>
+        <h3>Домашние задания</h3>
+        <p>Разные типы заданий: текст, видео, PDF — с комментарием от преподавателя.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-2">
+        <div class="feature-icon">🛠️</div>
+        <h3>Конструктор курсов</h3>
+        <p>Преподаватели создают блоки с уроками и заданиями прямо в браузере.</p>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="feature-icon">📊</div>
+        <h3>Аналитика прогресса</h3>
+        <p>Преподаватель видит прогресс каждого студента и может своевременно помочь.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-1">
+        <div class="feature-icon">🔒</div>
+        <h3>Открытые и закрытые курсы</h3>
+        <p>Открытые — для всех; закрытые — только по заявке с одобрения преподавателя.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-2">
+        <div class="feature-icon">⚡</div>
+        <h3>Мгновенный старт</h3>
+        <p>Регистрация занимает 30 секунд. Первый урок доступен сразу после входа.</p>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:60px 24px 100px;position:relative;z-index:1;">
+    <div style="max-width:860px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:40px;text-align:center;">
+        <div style="font-size:2.4rem;margin-bottom:12px;">🎓</div>
+        <h2 style="font-size:1.3rem;margin-bottom:10px;">Я студент</h2>
+        <p style="color:var(--mid);font-size:.9rem;margin-bottom:22px;">Записывайся на курсы и получай знания</p>
+        <a href="/register" class="btn btn-primary btn-full"
+           {% if g.user %}onclick="return confirmLeave(event, '/register')"{% endif %}>Зарегистрироваться</a>
+      </div>
+      <div style="background:var(--surface);border:1px solid rgba(13,148,136,.25);border-radius:var(--r-xl);padding:40px;text-align:center;">
+        <div style="font-size:2.4rem;margin-bottom:12px;">👨‍🏫</div>
+        <h2 style="font-size:1.3rem;margin-bottom:10px;">Я преподаватель</h2>
+        <p style="color:var(--mid);font-size:.9rem;margin-bottom:22px;">Создавай курсы и управляй студентами</p>
+        <a href="/teacher/register" class="btn btn-teal btn-full"
+           {% if g.user %}onclick="return confirmLeave(event, '/teacher/register')"{% endif %}>Стать преподавателем</a>
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}

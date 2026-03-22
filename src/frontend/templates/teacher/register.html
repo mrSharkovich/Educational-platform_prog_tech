@@ -1,0 +1,82 @@
+{% extends "teacher/base.html" %}
+{% block title %}Регистрация преподавателя — EduPath{% endblock %}
+{% block navbar %}{% endblock %}
+
+{% block body %}
+<div class="teacher-auth-page">
+  <div class="teacher-auth-box">
+    <div class="auth-logo">
+            <a href="/" style="display:inline-block;">
+        <span style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;letter-spacing:-.03em;color:#111827;">Edu<span style="color:#0d9488;">Path</span></span>
+      </a>
+      <p>Портал преподавателя</p>
+    </div>
+
+    <div style="display:flex;justify-content:center;margin-bottom:20px;">
+      <span class="teacher-badge" style="font-size:.8rem;padding:5px 14px;">Преподаватель</span>
+    </div>
+
+    <h1 class="auth-title">Регистрация</h1>
+    <p class="auth-sub">Создайте аккаунт преподавателя</p>
+
+    <div class="error-banner" id="error-banner"></div>
+
+    <form class="auth-form" id="regForm">
+      <div style="display:flex;gap:14px;">
+        <div class="field" style="flex:1;min-width:0;">
+          <label>Имя</label>
+          <input type="text" id="name" placeholder="Иван" required>
+        </div>
+        <div class="field" style="flex:1;min-width:0;">
+          <label>Фамилия</label>
+          <input type="text" id="surname" placeholder="Петров" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Логин</label>
+        <input type="text" id="username" placeholder="teacher_login" required>
+      </div>
+      <div class="field">
+        <label>Пароль</label>
+        <input type="password" id="password" placeholder="••••••••" required>
+      </div>
+      <button type="submit" class="btn btn-teal btn-full" id="submitBtn">
+        Создать аккаунт
+      </button>
+    </form>
+
+    <p class="auth-footer">
+      Уже есть аккаунт? <a href="/teacher/login" style="color:#0d9488;">Войти</a>
+    </p>
+    <p class="auth-footer" style="margin-top:6px;">
+      Вы студент? <a href="/register">Регистрация для студентов</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('regForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('error-banner');
+  err.style.display = 'none';
+  btnLoad(btn, true);
+  const res = await api.post('/api/teacher/register', {
+    name: document.getElementById('name').value,
+    surname: document.getElementById('surname').value,
+    username: document.getElementById('username').value,
+    password: document.getElementById('password').value
+  });
+  if (res.success) {
+    toast('Аккаунт создан!', 'success');
+    setTimeout(() => window.location = '/teacher/dashboard', 400);
+  } else {
+    err.textContent = res.error || 'Ошибка регистрации';
+    err.style.display = 'block';
+    btnLoad(btn, false);
+  }
+});
+</script>
+{% endblock %}

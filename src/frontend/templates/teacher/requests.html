@@ -1,0 +1,119 @@
+{% extends "teacher/base.html" %}
+{% block title %}Заявки — EduPath{% endblock %}
+
+{% block body %}
+<div style="padding-top:var(--nav-h);">
+<div class="t-page">
+
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+    <div>
+      <h1>Заявки на курсы</h1>
+      <p style="color:var(--mid);margin-top:4px;">Заявки студентов на закрытые курсы</p>
+    </div>
+  </div>
+
+  <div id="requestsContent">
+    <div class="loading-pulse">
+      <div class="skel" style="height:56px;border-radius:8px;"></div>
+      <div class="skel" style="height:56px;border-radius:8px;opacity:.7;margin-top:10px;"></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<style>
+.req-course-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+.req-course-head {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 12px;
+}
+.req-course-title {
+  font-weight: 600; font-size: 1rem; flex: 1;
+}
+.req-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #ef4444; flex-shrink: 0;
+}
+.req-go-btn { font-size: .82rem; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function approveReq(id, btn) {
+  btnLoad(btn, true);
+  const res = await api.post(`/api/teacher/requests/${id}/approve`);
+  if (res.success) { toast('Заявка принята', 'success'); loadRequests(); }
+  else { toast(res.error, 'error'); btnLoad(btn, false); }
+}
+async function rejectReq(id, btn) {
+  btnLoad(btn, true);
+  const res = await api.post(`/api/teacher/requests/${id}/reject`);
+  if (res.success) { toast('Заявка отклонена', 'success'); loadRequests(); }
+  else { toast(res.error, 'error'); btnLoad(btn, false); }
+}
+
+async function loadRequests() {
+  const data = await api.get('/api/teacher/all-requests');
+  const el = document.getElementById('requestsContent');
+
+  if (!data.length) {
+    el.innerHTML = '<div class="t-empty card"><div class="t-empty-icon">📭</div><p>Заявок пока нет</p></div>';
+    return;
+  }
+
+  const statusLabel = s => s === 'pending'
+    ? '<span class="badge badge-amber">Ожидает</span>'
+    : s === 'approved'
+      ? '<span class="badge badge-green">Принята</span>'
+      : '<span class="badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);">Отклонена</span>';
+
+  el.innerHTML = data.map(course => `
+    <div class="req-course-card">
+      <div class="req-course-head">
+        ${course.pending > 0 ? '<div class="req-dot"></div>' : ''}
+        <span class="req-course-title">${escHtml(course.course_title)}</span>
+        <span class="badge ${course.pending > 0 ? 'badge-amber' : ''}" style="${course.pending === 0 ? 'background:var(--surface2);color:var(--mid);' : ''}">
+          ${course.pending > 0 ? course.pending + ' ожидает' : 'нет новых'}
+        </span>
+        <a href="/teacher/course/${course.course_id}" class="btn btn-teal-ghost btn-sm req-go-btn"
+           onclick="switchToRequests(event, ${course.course_id})">Управление →</a>
+      </div>
+      <div class="req-list">
+        ${course.requests.map(r => `
+        <div class="req-item">
+          <div class="req-info">
+            <span class="req-name">${escHtml(r.first_name)} ${escHtml(r.last_name)}</span>
+            <span class="req-login">@${escHtml(r.login)}</span>
+            <span class="req-date">${(r.created_at||'').slice(0,16)}</span>
+          </div>
+          ${statusLabel(r.status)}
+          ${r.status === 'pending' ? `
+          <div class="req-actions">
+            <button class="btn btn-teal btn-sm"   onclick="approveReq(${r.id}, this)">✓ Принять</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectReq(${r.id}, this)">✕ Отклонить</button>
+          </div>` : ''}
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function switchToRequests(e, courseId) {
+  // Navigate to course manage page and auto-open requests tab
+  window.location = `/teacher/course/${courseId}#requests`;
+}
+
+loadRequests();
+</script>
+{% endblock %}

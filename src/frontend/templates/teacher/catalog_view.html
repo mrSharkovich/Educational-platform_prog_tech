@@ -1,0 +1,92 @@
+{% extends "teacher/base.html" %}
+{% block title %}Каталог курсов — EduPath{% endblock %}
+
+{% block body %}
+<div style="padding-top:var(--nav-h);">
+<div class="t-page">
+
+  <div class="page-header">
+    <h1>Каталог курсов</h1>
+    <p style="color:var(--mid);">Все курсы платформы — открытые и закрытые</p>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-bottom:28px;flex-wrap:wrap;">
+    <button class="btn btn-sm" id="filterAll"    onclick="setFilter('all')"    style="background:var(--accent);color:#fff;">Все</button>
+    <button class="btn btn-ghost btn-sm" id="filterOpen"   onclick="setFilter('open')">🔓 Открытые</button>
+    <button class="btn btn-ghost btn-sm" id="filterClosed" onclick="setFilter('closed')">🔒 Закрытые</button>
+  </div>
+
+  <div class="catalog-grid" id="catalogGrid">
+    <div class="catalog-card"><div class="skel" style="height:20px;width:60%;border-radius:6px;"></div><div class="skel" style="height:12px;border-radius:6px;margin-top:8px;"></div></div>
+    <div class="catalog-card" style="opacity:.6;"><div class="skel" style="height:20px;width:70%;border-radius:6px;"></div></div>
+  </div>
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allCourses = [];
+let filter = 'all';
+
+async function loadCatalog() {
+  // Teacher sees ALL courses (open + closed) but only their own
+  // We'll reuse the open API and show a note
+  const open = await api.get('/api/catalog/open');
+  // To also show closed, we'd need a teacher-specific endpoint
+  // For now, show open courses + teacher's own courses
+  const mine = await api.get('/api/teacher/courses');
+  const mineIds = new Set(mine.map(c => c.id));
+
+  // Merge: mine (all) + open from others
+  allCourses = [
+    ...mine.map(c => ({ ...c, mine: true })),
+    ...open.filter(c => !mineIds.has(c.id)).map(c => ({ ...c, mine: false }))
+  ];
+  renderCatalog();
+}
+
+function setFilter(f) {
+  filter = f;
+  document.querySelectorAll('[id^=filter]').forEach(btn => {
+    btn.className = 'btn btn-ghost btn-sm';
+  });
+  document.getElementById('filter' + f.charAt(0).toUpperCase() + f.slice(1)).style.cssText = 'background:var(--accent);color:#fff;';
+  renderCatalog();
+}
+
+function renderCatalog() {
+  const grid = document.getElementById('catalogGrid');
+  let courses = allCourses;
+  if (filter === 'open')   courses = courses.filter(c => c.is_open);
+  if (filter === 'closed') courses = courses.filter(c => !c.is_open);
+
+  if (!courses.length) {
+    grid.innerHTML = `<div class="t-empty" style="grid-column:1/-1;"><div class="t-empty-icon">📭</div><p>Нет курсов в этой категории</p></div>`;
+    return;
+  }
+  grid.innerHTML = courses.map(c => `
+    <div class="t-catalog-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;">
+        <h3 style="font-size:.98rem;">${escHtml(c.title)}</h3>
+        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+          ${c.is_open ? '<span class="badge badge-green">🔓 Открытый</span>' : '<span class="badge badge-amber">🔒 Закрытый</span>'}
+          ${c.mine ? '<span class="badge badge-accent">Мой</span>' : ''}
+        </div>
+      </div>
+      <p style="font-size:.85rem;color:var(--mid);margin-bottom:14px;">${escHtml(c.description || 'Описание не указано')}</p>
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:.8rem;color:var(--mid);">
+        ${c.mine ? `<span>👥 ${c.students || 0} студентов · 📖 ${c.lessons || 0} уроков</span>` : '<span></span>'}
+        ${c.mine ? `<a href="/teacher/course/${c.id}" class="btn btn-teal-ghost btn-sm">Управление</a>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadCatalog();
+</script>
+{% endblock %}

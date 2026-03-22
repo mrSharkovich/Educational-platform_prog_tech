@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Каталог курсов — EduPath{% endblock %}
+
+{% block body %}
+<div class="app-layout">
+<div class="catalog-page">
+
+  <!-- Заголовок -->
+  <div class="page-header">
+    <h1>Каталог курсов</h1>
+    <p>Открытые курсы доступны сразу, для закрытых — отправьте заявку</p>
+  </div>
+
+  <!-- Поиск закрытого курса -->
+  <div class="search-closed-panel">
+    <div class="panel-icon">🔒</div>
+    <div class="panel-body">
+      <h3>Есть закрытый курс?</h3>
+      <p>Введите точное название курса — если он существует, заявка будет отправлена преподавателю</p>
+      <div class="search-row">
+        <input type="text" id="closedSearchInput" placeholder="Название закрытого курса..." maxlength="100">
+        <button class="btn btn-primary" id="closedSearchBtn" onclick="searchClosed()">Найти и подать заявку</button>
+      </div>
+      <div class="search-error" id="searchError"></div>
+    </div>
+  </div>
+
+  <!-- Открытые курсы -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+    <h2 style="font-size:1.2rem;">Открытые курсы</h2>
+    <span class="badge badge-green" id="openCount"></span>
+  </div>
+
+  <div class="catalog-grid" id="catalogGrid">
+    <!-- skeleton -->
+    <div class="catalog-card"><div class="skel" style="height:20px;width:70%;border-radius:6px;"></div><div class="skel" style="height:12px;border-radius:6px;"></div><div class="skel" style="height:12px;width:50%;border-radius:6px;"></div></div>
+    <div class="catalog-card" style="opacity:.6;"><div class="skel" style="height:20px;width:60%;border-radius:6px;"></div><div class="skel" style="height:12px;border-radius:6px;"></div></div>
+    <div class="catalog-card" style="opacity:.35;"><div class="skel" style="height:20px;width:50%;border-radius:6px;"></div></div>
+  </div>
+
+</div>
+</div>
+
+<!-- Модальное окно: заявка отправлена -->
+<div class="modal-overlay" id="successModal" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-icon">✅</div>
+    <h2>Заявка отправлена!</h2>
+    <p id="successModalText">Ваша заявка на курс отправлена. Преподаватель рассмотрит её и предоставит доступ.</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal()">Отлично, понятно</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно: заявка отклонена — повторная подача -->
+<div class="modal-overlay" id="rejectModal" onclick="document.getElementById('rejectModal').classList.remove('show')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-icon">❌</div>
+    <h2>Заявка была отклонена</h2>
+    <p>Преподаватель отклонил ваш доступ к курсу <strong id="rejectedCourseTitle"></strong>.</p>
+    <p style="margin-top:10px;">Хотите отправить заявку повторно?</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="reapplyBtn" onclick="reapplyCourse()">Отправить повторно</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('rejectModal').classList.remove('show')">Нет, отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно: войдите -->
+<div class="modal-overlay" id="loginModal" onclick="closeLoginModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-icon">👤</div>
+    <h2>Необходима авторизация</h2>
+    <p>Чтобы записаться на курс, войдите в аккаунт или зарегистрируйтесь.</p>
+    <div class="modal-actions">
+      <a href="/login"    class="btn btn-primary">Войти</a>
+      <a href="/register" class="btn btn-ghost">Регистрация</a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const IS_LOGGED_IN = {{ 'true' if g.user else 'false' }};
+
+async function loadCatalog() {
+  const courses = await api.get('/api/catalog/open');
+  const grid = document.getElementById('catalogGrid');
+  document.getElementById('openCount').textContent = courses.length + ' курсов';
+
+  if (!courses.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:60px;">
+      <div class="empty-icon">📭</div>
+      <h3>Открытых курсов пока нет</h3>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = courses.map(c => {
+    const statusBadge = c.enrolled
+      ? `<span class="badge badge-green">✓ Записан</span>`
+      : c.pending
+        ? `<span class="badge badge-amber">⏳ Заявка</span>`
+        : `<span class="badge badge-accent">Открытый</span>`;
+
+    const actionBtn = c.enrolled
+      ? `<a href="/course/${c.id}" class="btn btn-primary btn-sm">Перейти к курсу →</a>`
+      : c.pending
+        ? `<button class="btn btn-ghost btn-sm" disabled>Ожидает одобрения</button>`
+        : `<button class="btn btn-primary btn-sm" onclick="enroll(${c.id}, this)">Записаться</button>`;
+
+    return `
+    <div class="catalog-card fade-up">
+      <div class="catalog-card-head">
+        <h3>${escapeHtml(c.title)}</h3>
+        ${statusBadge}
+      </div>
+      ${c.description ? `<p>${escapeHtml(c.description)}</p>` : '<p class="text-muted text-sm">Описание не указано</p>'}
+      <div class="catalog-card-footer">
+        <span class="text-xs text-muted">🔓 Открытый курс</span>
+        ${actionBtn}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function enroll(courseId, btn) {
+  if (!IS_LOGGED_IN) { document.getElementById('loginModal').classList.add('show'); return; }
+  btnLoad(btn, true);
+  const res = await api.post(`/api/catalog/enroll/${courseId}`);
+  if (res.success) {
+    toast('Вы успешно записаны на курс!', 'success');
+    await loadCatalog();
+  } else {
+    toast(res.error || 'Ошибка', 'error');
+    btnLoad(btn, false);
+  }
+}
+
+async function searchClosed() {
+  const input = document.getElementById('closedSearchInput');
+  const btn   = document.getElementById('closedSearchBtn');
+  const errEl = document.getElementById('searchError');
+  errEl.style.display = 'none';
+
+  if (!IS_LOGGED_IN) { document.getElementById('loginModal').classList.add('show'); return; }
+
+  const title = input.value.trim();
+  if (!title) { errEl.textContent = 'Введите название курса'; errEl.style.display = 'block'; return; }
+
+  btnLoad(btn, true);
+  const res = await api.post('/api/catalog/search', { title });
+  btnLoad(btn, false);
+
+  if (res.success) {
+    document.getElementById('successModalText').textContent =
+      `Ваша заявка на курс «${res.course_title}» отправлена. Преподаватель рассмотрит её и предоставит доступ.`;
+    document.getElementById('successModal').classList.add('show');
+    input.value = '';
+  } else if (res.rejected) {
+    // Show re-apply modal
+    document.getElementById('rejectedCourseTitle').textContent = res.course_title;
+    document.getElementById('rejectModal').dataset.courseId = res.course_id;
+    document.getElementById('rejectModal').classList.add('show');
+    input.value = '';
+  } else {
+    errEl.textContent = res.error || 'Ошибка поиска';
+    errEl.style.display = 'block';
+  }
+}
+
+async function reapplyCourse() {
+  const modal = document.getElementById('rejectModal');
+  const courseId = modal.dataset.courseId;
+  const btn = document.getElementById('reapplyBtn');
+  btnLoad(btn, true);
+  const res = await api.post(`/api/catalog/reapply/${courseId}`);
+  btnLoad(btn, false);
+  if (res.success) {
+    modal.classList.remove('show');
+    document.getElementById('successModalText').textContent =
+      `Повторная заявка на курс «${res.course_title}» отправлена!`;
+    document.getElementById('successModal').classList.add('show');
+  } else {
+    toast(res.error || 'Ошибка', 'error');
+  }
+}
+
+document.getElementById('closedSearchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchClosed();
+});
+
+function closeModal()      { document.getElementById('successModal').classList.remove('show'); }
+function closeLoginModal() { document.getElementById('loginModal').classList.remove('show'); }
+
+function escapeHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadCatalog();
+</script>
+{% endblock %}

@@ -1,0 +1,693 @@
+{% extends "teacher/base.html" %}
+{% block title %}Конструктор курса — EduPath{% endblock %}
+
+{% block head %}
+<style>
+/* ── Builder-specific overrides ── */
+.builder-layout { height: calc(100vh - var(--nav-h)); }
+.block-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r-md); margin-bottom: 4px; cursor: pointer;
+  transition: background .15s;
+}
+.block-header:hover { background: #e9eaf4; }
+.block-header.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; }
+.block-title-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-family: 'Syne', sans-serif; font-weight: 600; font-size: .92rem;
+  color: var(--ink);
+}
+.block-toggle { color: var(--mid); font-size: .8rem; transition: transform .2s; flex-shrink: 0; }
+.block-toggle.open { transform: rotate(90deg); }
+.block-body {
+  border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 var(--r-md) var(--r-md);
+  overflow: hidden; margin-bottom: 10px;
+}
+.block-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .15s;
+  background: var(--surface);
+}
+.block-item:last-child { border-bottom: none; }
+.block-item:hover { background: var(--surface2); }
+.block-item.active { background: rgba(13,148,136,.06); border-left: 3px solid #0d9488; }
+.block-item-icon {
+  width: 28px; height: 28px; border-radius: 6px;
+  display: grid; place-items: center; font-size: .85rem; flex-shrink: 0;
+}
+.block-item-icon.lesson { background: rgba(79,110,247,.1); }
+.block-item-icon.task   { background: rgba(245,158,11,.1); }
+.block-item-title { flex: 1; font-size: .875rem; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.block-item-type  { font-size: .72rem; color: var(--muted); flex-shrink: 0; }
+.block-add-row {
+  display: flex; gap: 8px; padding: 10px 16px;
+  background: var(--bg);
+}
+.block-add-row button {
+  flex: 1; padding: 7px; border-radius: var(--r-sm);
+  font-size: .8rem; font-weight: 500; cursor: pointer;
+  border: 1.5px dashed var(--border); color: var(--mid);
+  background: none; transition: all .15s;
+}
+.block-add-row button:hover { border-color: #0d9488; color: #0d9488; background: rgba(13,148,136,.04); }
+.add-block-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; padding: 10px; border-radius: var(--r-md);
+  border: 2px dashed var(--border); color: var(--mid); font-size: .85rem;
+  cursor: pointer; background: none; transition: all .2s; margin-top: 6px;
+}
+.add-block-btn:hover { border-color: #0d9488; color: #0d9488; }
+
+/* ── Task type selector ── */
+.task-type-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;
+}
+.task-type-btn {
+  padding: 10px 8px; border-radius: var(--r-sm); cursor: pointer;
+  border: 1.5px solid var(--border); background: var(--bg);
+  text-align: center; font-size: .8rem; font-weight: 500; color: var(--mid);
+  transition: all .15s;
+}
+.task-type-btn:hover { border-color: #0d9488; color: #0d9488; }
+.task-type-btn.selected { border-color: #0d9488; background: rgba(13,148,136,.08); color: #0d9488; }
+.task-type-btn .task-type-icon { font-size: 1.2rem; display: block; margin-bottom: 4px; }
+
+/* ── Options list for choice tasks ── */
+.options-list { display: flex; flex-direction: column; gap: 6px; }
+.option-row { display: flex; align-items: center; gap: 8px; }
+.option-row input[type=text] {
+  flex: 1; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 7px 10px; font-size: .875rem; color: var(--ink);
+}
+.option-row input[type=text]:focus { border-color: #0d9488; outline: none; }
+.option-del { color: var(--muted); cursor: pointer; padding: 4px; font-size: .85rem; border-radius: 4px; }
+.option-del:hover { color: var(--rose); background: rgba(239,68,68,.08); }
+
+/* ── Editor panel ── */
+.editor-panel { display: flex; flex-direction: column; gap: 16px; }
+.editor-section-label {
+  font-size: .72rem; font-weight: 600; color: var(--mid);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;
+}
+</style>
+{% endblock %}
+
+{% block body %}
+<div style="padding-top:var(--nav-h);">
+<div class="builder-layout">
+
+  <!-- ── LEFT: block/item tree ── -->
+  <aside class="builder-sidebar">
+    <div class="builder-sidebar-head">
+      <h3 id="sidebarTitle">{% if course %}{{ course['title'] }}{% else %}Новый курс{% endif %}</h3>
+      <p style="font-size:.75rem;color:var(--mid);margin-top:2px;" id="sidebarSub">Структура курса</p>
+    </div>
+    <div class="builder-lesson-list" id="blockTree" style="padding:10px 12px;overflow-y:auto;flex:1;"></div>
+    {% if course %}
+    <div style="padding:8px 12px;flex-shrink:0;border-top:1px solid var(--border);">
+      <button class="add-block-btn" onclick="addBlock()" style="margin:0;width:100%;">+ Добавить блок</button>
+    </div>
+    {% endif %}
+  </aside>
+
+  <!-- ── RIGHT: editor ── -->
+  <div class="builder-editor" id="builderEditor">
+    <div class="builder-editor-inner">
+
+      {% if course %}
+      <!-- Existing course: show info button, hide meta form by default -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+        <div>
+          <h2 style="margin:0;font-size:1.1rem;">{{ course['title'] }}</h2>
+          <p style="color:var(--mid);font-size:.82rem;margin-top:4px;">
+            {% if course['is_open'] %}🔓 Открытый{% else %}🔒 Закрытый{% endif %}
+            {% if course['description'] %} · {{ course['description'][:60] }}{% if course['description']|length > 60 %}…{% endif %}{% endif %}
+          </p>
+        </div>
+        <button class="btn btn-teal-ghost btn-sm" id="toggleMetaBtn" onclick="toggleMeta()">
+          ✏️ Редактировать информацию о курсе
+        </button>
+      </div>
+
+      <div class="course-meta-form" id="courseMetaForm" style="display:none;">
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px;">
+          <div class="field">
+            <label>Название курса</label>
+            <input type="text" id="courseTitle" placeholder="Например: Python для начинающих"
+                   value="{{ course['title'] }}">
+          </div>
+          <div class="field">
+            <label>Описание</label>
+            <textarea id="courseDesc" rows="2" placeholder="Краткое описание для каталога...">{{ course['description'] }}</textarea>
+          </div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Открытый курс</div>
+            <div class="toggle-desc">Отображается в каталоге; студенты записываются без заявки</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="courseIsOpen" {% if course['is_open'] %}checked{% endif %}>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-teal btn-sm" id="saveCourseBtn" onclick="saveCourse()">Сохранить изменения</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleMeta()">Скрыть</button>
+          <button class="btn btn-danger btn-sm" style="margin-left:auto;" onclick="confirmDeleteCourse()">🗑 Удалить курс</button>
+        </div>
+      </div>
+
+      {% else %}
+      <!-- New course: always show meta form -->
+      <h2 style="margin-bottom:20px;">Создать новый курс</h2>
+      <div class="course-meta-form" id="courseMetaForm">
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px;">
+          <div class="field">
+            <label>Название курса</label>
+            <input type="text" id="courseTitle" placeholder="Например: Python для начинающих" value="">
+          </div>
+          <div class="field">
+            <label>Описание</label>
+            <textarea id="courseDesc" rows="2" placeholder="Краткое описание для каталога..."></textarea>
+          </div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Открытый курс</div>
+            <div class="toggle-desc">Отображается в каталоге; студенты записываются без заявки</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="courseIsOpen" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Item editor (shown when item selected) -->
+      <div id="itemEditor" style="display:none;margin-top:28px;"></div>
+
+    </div>
+
+    <div class="builder-save-bar">
+      <span class="save-hint" id="saveHint">{% if course %}Курс загружен{% else %}Заполните данные и сохраните курс{% endif %}</span>
+      <div style="display:flex;gap:10px;">
+        <a href="/teacher/dashboard" class="btn btn-ghost btn-sm">← Назад</a>
+        {% if not course %}
+        <button class="btn btn-teal" id="saveCourseBtn" onclick="saveCourse()">Создать курс</button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+{% if course %}
+<!-- Delete course confirm modal -->
+<div class="modal-overlay" id="deleteCourseModal" onclick="document.getElementById('deleteCourseModal').classList.remove('show')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;">
+    <div class="modal-icon">⚠️</div>
+    <h2>Удалить курс?</h2>
+    <p>Курс <strong>{{ course['title'] }}</strong> и все его блоки, уроки и задания будут удалены безвозвратно.</p>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="deleteCourseConfirmBtn" onclick="deleteCourse()">Да, удалить</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('deleteCourseModal').classList.remove('show')">Отмена</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const COURSE_ID = {{ course['id'] if course else 'null' }};
+let blocks = [];          // [{id, title, open, items:[{id, type, title, lesson|task}]}]
+let currentItem = null;   // {blockIdx, itemIdx}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+(async () => {
+  if (!COURSE_ID) return;
+  const raw = await api.get(`/api/teacher/courses/${COURSE_ID}/blocks`);
+  blocks = raw.map(b => ({ ...b, open: true }));
+  renderTree();
+})();
+
+// ══════════════════════════════════════════════════════════════
+// TREE RENDER
+// ══════════════════════════════════════════════════════════════
+function renderTree() {
+  const el = document.getElementById('blockTree');
+  document.getElementById('sidebarSub').textContent =
+    `${blocks.length} блок(ов) · ${blocks.reduce((a,b)=>a+b.items.length,0)} элем.`;
+
+  if (!blocks.length) {
+    el.innerHTML = `<div style="padding:20px 0;color:var(--muted);font-size:.85rem;text-align:center;">Блоков пока нет.<br>Нажмите «+ Добавить блок»</div>`;
+    return;
+  }
+
+  el.innerHTML = blocks.map((b, bi) => `
+    <div class="block-header ${b.open?'open':''}" onclick="toggleBlock(${bi})">
+      <input class="block-title-input" value="${escHtml(b.title)}"
+             onclick="event.stopPropagation()"
+             onchange="renameBlock(${bi}, this.value)"
+             placeholder="Название блока">
+      <span style="font-size:.75rem;color:var(--muted);flex-shrink:0;">${b.items.length}</span>
+      <span class="block-toggle ${b.open?'open':''}">▶</span>
+      <span class="mat-del" onclick="event.stopPropagation();deleteBlock(${bi})" title="Удалить блок">✕</span>
+    </div>
+    ${b.open ? `
+    <div class="block-body">
+      ${b.items.length ? b.items.map((it, ii) => `
+        <div class="block-item ${isActive(bi,ii)?'active':''}" onclick="selectItem(${bi},${ii})">
+          <div class="block-item-icon ${it.type}">${it.type==='lesson'?'📖':'✏️'}</div>
+          <span class="block-item-title">${escHtml(it.title)}</span>
+          <span class="block-item-type">${it.type==='lesson'?'Урок':'Задание'}</span>
+          <span class="mat-del" onclick="event.stopPropagation();deleteItem(${bi},${ii})" title="Удалить">✕</span>
+        </div>`).join('')
+      : `<div style="padding:12px 16px;font-size:.82rem;color:var(--muted);">Блок пустой</div>`}
+      <div class="block-add-row">
+        <button onclick="addLesson(${bi})">+ Урок</button>
+        <button onclick="addTask(${bi})">+ Задание</button>
+      </div>
+    </div>` : ''}
+  `).join('');
+}
+
+function isActive(bi, ii) {
+  return currentItem && currentItem.blockIdx === bi && currentItem.itemIdx === ii;
+}
+
+function toggleBlock(bi) {
+  blocks[bi].open = !blocks[bi].open;
+  renderTree();
+}
+
+// ══════════════════════════════════════════════════════════════
+// BLOCK CRUD
+// ══════════════════════════════════════════════════════════════
+async function addBlock() {
+  if (!COURSE_ID) { toast('Сначала создайте курс', 'error'); return; }
+  const res = await api.post(`/api/teacher/courses/${COURSE_ID}/blocks`, { title: 'Новый блок' });
+  if (res.success) {
+    blocks.push({ id: res.block_id, title: 'Новый блок', open: true, items: [] });
+    renderTree();
+    toast('Блок добавлен', 'success');
+  } else toast(res.error, 'error');
+}
+
+async function renameBlock(bi, title) {
+  const b = blocks[bi];
+  b.title = title;
+  if (b.id) await fetch(`/api/teacher/blocks/${b.id}`, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ title })
+  });
+}
+
+async function deleteBlock(bi) {
+  const b = blocks[bi];
+  if (!confirm(`Удалить блок «${b.title}» и все его элементы?`)) return;
+  if (b.id) await fetch(`/api/teacher/blocks/${b.id}`, { method: 'DELETE' });
+  blocks.splice(bi, 1);
+  currentItem = null;
+  document.getElementById('itemEditor').style.display = 'none';
+  renderTree();
+  toast('Блок удалён', 'success');
+}
+
+// ══════════════════════════════════════════════════════════════
+// ADD LESSON / TASK
+// ══════════════════════════════════════════════════════════════
+async function addLesson(bi) {
+  const b = blocks[bi];
+  if (!b.id) { toast('Сохраните курс', 'error'); return; }
+  const res = await api.post(`/api/teacher/blocks/${b.id}/items/lesson`,
+    { title: 'Новый урок', content: '', home_work: 0, materials: [] });
+  if (res.success) {
+    b.items.push({ id: res.item_id, type: 'lesson', title: 'Новый урок',
+      lesson: { id: res.lesson_id, title: 'Новый урок', content: '', home_work: 0, materials: [] }});
+    renderTree();
+    selectItem(bi, b.items.length - 1);
+  } else toast(res.error, 'error');
+}
+
+async function addTask(bi) {
+  const b = blocks[bi];
+  if (!b.id) { toast('Сохраните курс', 'error'); return; }
+  const res = await api.post(`/api/teacher/blocks/${b.id}/items/task`,
+    { question: 'Новое задание', task_type: 'text', options: '', correct_answer: '' });
+  if (res.success) {
+    b.items.push({ id: res.item_id, type: 'task', title: 'Новое задание',
+      task: { id: res.task_id, question: 'Новое задание', task_type: 'text', options: '', correct_answer: '' }});
+    renderTree();
+    selectItem(bi, b.items.length - 1);
+  } else toast(res.error, 'error');
+}
+
+async function deleteItem(bi, ii) {
+  const it = blocks[bi].items[ii];
+  if (!confirm(`Удалить «${it.title}»?`)) return;
+  if (it.id) await fetch(`/api/teacher/items/${it.id}`, { method: 'DELETE' });
+  blocks[bi].items.splice(ii, 1);
+  if (currentItem && currentItem.blockIdx === bi && currentItem.itemIdx === ii) {
+    currentItem = null;
+    document.getElementById('itemEditor').style.display = 'none';
+  }
+  renderTree();
+  toast('Удалено', 'success');
+}
+
+// ══════════════════════════════════════════════════════════════
+// SELECT ITEM → SHOW EDITOR
+// ══════════════════════════════════════════════════════════════
+function selectItem(bi, ii) {
+  currentItem = { blockIdx: bi, itemIdx: ii };
+  const it = blocks[bi].items[ii];
+  const ed = document.getElementById('itemEditor');
+  ed.style.display = 'block';
+  if (it.type === 'lesson') renderLessonEditor(it);
+  else                       renderTaskEditor(it);
+  renderTree();
+  // Scroll editor into view
+  ed.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ══════════════════════════════════════════════════════════════
+// LESSON EDITOR
+// ══════════════════════════════════════════════════════════════
+function renderLessonEditor(it) {
+  const l = it.lesson || {};
+  const mats = l.materials || [];
+  document.getElementById('itemEditor').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <h2 style="font-size:1.1rem;margin:0;">📖 Урок</h2>
+    </div>
+    <div class="editor-panel">
+      <div class="field">
+        <label>Название урока</label>
+        <input type="text" id="lessonTitle" value="${escHtml(l.title||'')}" placeholder="Название урока">
+      </div>
+      <div class="field">
+        <label>Содержимое</label>
+        <textarea id="lessonContent" rows="7" placeholder="Текст урока, теория, объяснения...">${escHtml(l.content||'')}</textarea>
+      </div>
+
+      <div>
+        <div class="editor-section-label">Материалы урока</div>
+        <div id="matBuilder">${mats.map((m,i)=>matRow(m,i)).join('')}</div>
+        <button class="btn btn-ghost btn-sm" onclick="addMaterial()" style="margin-top:6px;">+ Добавить материал</button>
+      </div>
+
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-teal" onclick="saveLesson()">Сохранить урок</button>
+      </div>
+    </div>`;
+}
+
+function matRow(m, i) {
+  const field2 = m.type === 'video'
+    ? `<input placeholder="YouTube ID" value="${escHtml(m.youtube_id||'')}" onchange="updateMat(${i},'youtube_id',this.value)" style="flex:1;">`
+    : `<input placeholder="Путь к файлу" value="${escHtml(m.file_path||'')}" onchange="updateMat(${i},'file_path',this.value)" style="flex:1;">`;
+  return `<div class="mat-row">
+    <select onchange="updateMat(${i},'type',this.value)">
+      <option value="video" ${m.type==='video'?'selected':''}>▶ Видео</option>
+      <option value="pdf"   ${m.type==='pdf'  ?'selected':''}>📄 PDF</option>
+    </select>
+    <input placeholder="Название" value="${escHtml(m.title||'')}" onchange="updateMat(${i},'title',this.value)" style="flex:1.5;">
+    ${field2}
+    <div class="mat-del" onclick="deleteMat(${i})">✕</div>
+  </div>`;
+}
+
+function addMaterial() {
+  const { blockIdx, itemIdx } = currentItem;
+  const it = blocks[blockIdx].items[itemIdx];
+  it.lesson.materials = it.lesson.materials || [];
+  it.lesson.materials.push({ type: 'video', title: '', youtube_id: '', file_path: '' });
+  document.getElementById('matBuilder').innerHTML =
+    it.lesson.materials.map((m,i)=>matRow(m,i)).join('');
+}
+function updateMat(i, key, val) {
+  const { blockIdx, itemIdx } = currentItem;
+  const it = blocks[blockIdx].items[itemIdx];
+  it.lesson.materials[i][key] = val;
+  if (key === 'type') document.getElementById('matBuilder').innerHTML =
+    it.lesson.materials.map((m,j)=>matRow(m,j)).join('');
+}
+function deleteMat(i) {
+  const { blockIdx, itemIdx } = currentItem;
+  const it = blocks[blockIdx].items[itemIdx];
+  it.lesson.materials.splice(i, 1);
+  document.getElementById('matBuilder').innerHTML =
+    it.lesson.materials.map((m,j)=>matRow(m,j)).join('');
+}
+
+async function saveLesson() {
+  if (!currentItem) return;
+  const { blockIdx, itemIdx } = currentItem;
+  const it = blocks[blockIdx].items[itemIdx];
+  const title   = document.getElementById('lessonTitle').value.trim();
+  const content = document.getElementById('lessonContent').value;
+  if (!title) { toast('Введите название урока', 'error'); return; }
+
+  it.lesson.title    = title;
+  it.lesson.content  = content;
+  it.lesson.home_work = 0;
+  it.title = title;
+
+  const res = await fetch(`/api/teacher/items/lesson/${it.lesson.id}`, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ ...it.lesson })
+  }).then(r=>r.json());
+
+  if (res.success) { toast('Урок сохранён!', 'success'); renderTree(); }
+  else toast(res.error||'Ошибка', 'error');
+}
+
+// ══════════════════════════════════════════════════════════════
+// TASK EDITOR
+// ══════════════════════════════════════════════════════════════
+const TASK_TYPES = [
+  { id: 'text',   icon: '✍️', label: 'Развёрнутый ответ' },
+  { id: 'short',  icon: '📝', label: 'Краткий ответ' },
+  { id: 'choice', icon: '☑️', label: 'Тест (выбор)' },
+  { id: 'video',  icon: '▶️', label: 'Видео + вопрос' },
+  { id: 'pdf',    icon: '📄', label: 'PDF + вопрос' },
+];
+
+function renderTaskEditor(it) {
+  const t = it.task || {};
+  const type = t.task_type || 'text';
+  document.getElementById('itemEditor').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <h2 style="font-size:1.1rem;margin:0;">✏️ Задание</h2>
+    </div>
+    <div class="editor-panel">
+
+      <div>
+        <div class="editor-section-label">Тип задания</div>
+        <div class="task-type-grid" id="taskTypeGrid">
+          ${TASK_TYPES.map(tt=>`
+            <div class="task-type-btn ${type===tt.id?'selected':''}" onclick="setTaskType('${tt.id}')">
+              <span class="task-type-icon">${tt.icon}</span>
+              ${tt.label}
+            </div>`).join('')}
+        </div>
+      </div>
+
+      ${(type==='video'||type==='pdf') ? `
+      <div class="field">
+        <label>${type==='video'?'YouTube ID':'Путь к PDF'}</label>
+        <input type="text" id="taskMedia" value="${escHtml(t.options||'')}"
+          placeholder="${type==='video'?'dQw4w9WgXcQ':'pdfs/file.pdf'}">
+      </div>` : ''}
+
+      <div class="field">
+        <label>Вопрос / задание</label>
+        <textarea id="taskQuestion" rows="3">${escHtml(t.question||'')}</textarea>
+      </div>
+
+      ${type==='choice' ? `
+      <div>
+        <div class="editor-section-label">Варианты ответов</div>
+        <div class="options-list" id="optionsList">
+          ${(t.options||'').split('\n').filter(Boolean).map((o,i)=>optionRow(o,i)).join('')}
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addOption()" style="margin-top:6px;">+ Вариант</button>
+        <div class="field" style="margin-top:14px;">
+          <label>Правильный ответ</label>
+          <input type="text" id="taskCorrect" value="${escHtml(t.correct_answer||'')}"
+            placeholder="Точный текст правильного варианта">
+        </div>
+      </div>` : ''}
+
+      ${type==='short' ? `
+      <div class="field">
+        <label>Правильный ответ <span style="font-weight:400;color:var(--mid);">(для автопроверки)</span></label>
+        <input type="text" id="taskCorrect" value="${escHtml(t.correct_answer||'')}"
+          placeholder="Оставьте пустым если не нужна автопроверка">
+      </div>` : ''}
+
+      <div class="field">
+        <label>Лимит попыток <span style="font-weight:400;color:var(--mid);">(1 = одна попытка; 100 = без ограничений)</span></label>
+        <input type="number" id="taskMaxAttempts" min="1" max="100" style="width:120px;"
+          value="${t.max_attempts ?? 100}">
+      </div>
+
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-teal" onclick="saveTask()">Сохранить задание</button>
+      </div>
+    </div>`;
+}
+
+function setTaskType(type) {
+  if (!currentItem) return;
+  const { blockIdx, itemIdx } = currentItem;
+  const it = blocks[blockIdx].items[itemIdx];
+  it.task.task_type = type;
+  renderTaskEditor(it);
+}
+
+function optionRow(val, i) {
+  return `<div class="option-row">
+    <input type="text" value="${escHtml(val)}" placeholder="Вариант ${i+1}"
+      onchange="updateOption(${i},this.value)">
+    <span class="option-del" onclick="deleteOption(${i})">✕</span>
+  </div>`;
+}
+
+function getOptions() {
+  return [...(document.querySelectorAll('.option-row input'))]
+    .map(inp => inp.value.trim()).filter(Boolean);
+}
+
+function addOption() {
+  const list = document.getElementById('optionsList');
+  const i = list.children.length;
+  list.insertAdjacentHTML('beforeend', optionRow('', i));
+}
+function updateOption(i, val) { /* values read at save */ }
+function deleteOption(i) {
+  const items = document.querySelectorAll('.option-row');
+  if (items[i]) items[i].remove();
+}
+
+async function saveTask() {
+  if (!currentItem) return;
+  const { blockIdx, itemIdx } = currentItem;
+  const it = blocks[blockIdx].items[itemIdx];
+  const t = it.task;
+
+  const question = document.getElementById('taskQuestion').value.trim();
+  if (!question) { toast('Введите вопрос', 'error'); return; }
+
+  t.question = question;
+  const mediaEl      = document.getElementById('taskMedia');
+  const correctEl    = document.getElementById('taskCorrect');
+  const maxAttEl     = document.getElementById('taskMaxAttempts');
+  t.options        = t.task_type === 'choice' ? getOptions().join('\n')
+                   : (mediaEl ? mediaEl.value : t.options || '');
+  t.correct_answer = correctEl ? correctEl.value : '';
+  t.max_attempts   = maxAttEl ? Math.max(1, parseInt(maxAttEl.value) || 100) : 100;
+  it.title = question;
+
+  const res = await fetch(`/api/teacher/items/task/${t.id}`, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(t)
+  }).then(r=>r.json());
+
+  if (res.success) { toast('Задание сохранено!', 'success'); renderTree(); }
+  else toast(res.error||'Ошибка', 'error');
+}
+
+// ══════════════════════════════════════════════════════════════
+// SAVE COURSE
+// ══════════════════════════════════════════════════════════════
+function toggleMeta() {
+  const form = document.getElementById('courseMetaForm');
+  const isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? '' : 'none';
+  const btn = document.getElementById('toggleMetaBtn');
+  if (btn) btn.textContent = isHidden ? '▲ Скрыть информацию' : '✏️ Редактировать информацию о курсе';
+}
+
+function confirmDeleteCourse() {
+  document.getElementById('deleteCourseModal').classList.add('show');
+}
+
+async function deleteCourse() {
+  const btn = document.getElementById('deleteCourseConfirmBtn');
+  btnLoad(btn, true);
+  const res = await fetch(`/api/teacher/courses/${COURSE_ID}`, { method: 'DELETE' }).then(r => r.json());
+  if (res.success) {
+    toast('Курс удалён', 'success');
+    setTimeout(() => window.location = '/teacher/dashboard', 600);
+  } else {
+    toast(res.error || 'Ошибка удаления', 'error');
+    btnLoad(btn, false);
+  }
+}
+
+async function saveCourse() {
+  const btn   = document.getElementById('saveCourseBtn');
+  const title = document.getElementById('courseTitle').value.trim();
+  if (!title) { toast('Введите название курса', 'error'); return; }
+  btnLoad(btn, true);
+
+  const payload = {
+    title,
+    description: document.getElementById('courseDesc').value,
+    is_open: document.getElementById('courseIsOpen').checked
+  };
+
+  let res;
+  if (COURSE_ID) {
+    res = await fetch(`/api/teacher/courses/${COURSE_ID}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    }).then(r=>r.json());
+    btnLoad(btn, false);
+    if (res.success) {
+      document.getElementById('sidebarTitle').textContent = title;
+      document.getElementById('saveHint').textContent = 'Курс сохранён ✓';
+      toast('Курс сохранён!', 'success');
+      // Update header display
+      const hdr = document.querySelector('.builder-editor-inner h2');
+      if (hdr) hdr.textContent = title;
+      const sub = document.querySelector('.builder-editor-inner p');
+      if (sub) {
+        const isOpen = payload.is_open;
+        sub.textContent = (isOpen ? '🔓 Открытый' : '🔒 Закрытый') +
+          (payload.description ? ' · ' + payload.description.slice(0,60) : '');
+      }
+      // Collapse form after save
+      document.getElementById('courseMetaForm').style.display = 'none';
+      const tb = document.getElementById('toggleMetaBtn');
+      if (tb) tb.textContent = '✏️ Редактировать информацию о курсе';
+    } else toast(res.error||'Ошибка', 'error');
+  } else {
+    res = await fetch('/api/teacher/courses', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    }).then(r=>r.json());
+    btnLoad(btn, false);
+    if (res.course_id) {
+      toast('Курс создан! Добавляйте блоки и уроки', 'success');
+      setTimeout(() => window.location = `/teacher/builder/${res.course_id}`, 500);
+    } else toast(res.error||'Ошибка', 'error');
+  }
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Регистрация — EduPath{% endblock %}
+{% block navbar %}{% endblock %}
+
+{% block body %}
+<div class="auth-page">
+  <div class="auth-box">
+    <div class="auth-logo">
+            <a href="/" style="display:inline-block;">
+        <span style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;letter-spacing:-.03em;color:#111827;">Edu<span style="color:#4f6ef7;">Path</span></span>
+      </a>
+      <p>Образовательная платформа</p>
+    </div>
+
+    <h1 class="auth-title">Создать аккаунт</h1>
+    <p class="auth-sub">Присоединяйтесь и начните учиться прямо сейчас</p>
+
+    <div class="error-banner" id="error-banner"></div>
+
+    <form class="auth-form" id="registerForm">
+      <div style="display:flex;gap:14px;">
+        <div class="field" style="flex:1;min-width:0;">
+          <label>Имя</label>
+          <input type="text" id="name" placeholder="Иван" required>
+        </div>
+        <div class="field" style="flex:1;min-width:0;">
+          <label>Фамилия</label>
+          <input type="text" id="surname" placeholder="Петров" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Логин</label>
+        <input type="text" id="username" placeholder="ivan_petrov" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>Пароль</label>
+        <input type="password" id="password" placeholder="••••••••" autocomplete="new-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="submitBtn">
+        Создать аккаунт
+      </button>
+    </form>
+
+    <p class="auth-footer">
+      Уже есть аккаунт? <a href="/login">Войти</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('error-banner');
+  err.style.display = 'none';
+  btnLoad(btn, true);
+
+  const res = await api.post('/api/register', {
+    name:     document.getElementById('name').value,
+    surname:  document.getElementById('surname').value,
+    username: document.getElementById('username').value,
+    password: document.getElementById('password').value
+  });
+
+  if (res.success) {
+    toast('Аккаунт создан!', 'success');
+    setTimeout(() => window.location = '/dashboard', 400);
+  } else {
+    err.textContent = res.error || 'Ошибка регистрации';
+    err.style.display = 'block';
+    btnLoad(btn, false);
+  }
+});
+</script>
+{% endblock %}

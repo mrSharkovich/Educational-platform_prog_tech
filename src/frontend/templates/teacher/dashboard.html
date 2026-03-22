@@ -1,0 +1,151 @@
+{% extends "teacher/base.html" %}
+{% block title %}Мои курсы — EduPath{% endblock %}
+
+{% block body %}
+<div style="padding-top:var(--nav-h);">
+<div class="t-page">
+
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+    <div>
+      <h1>Мои курсы</h1>
+      <p style="color:var(--mid);margin-top:4px;">Курсы, которые вы создали</p>
+    </div>
+    <a href="/teacher/builder" class="btn btn-teal">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Создать курс
+    </a>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row" style="margin:28px 0;">
+    <a href="/teacher/students" class="stat-card" style="text-decoration:none;cursor:pointer;transition:box-shadow .15s;"
+       onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow=''">
+      <div class="stat-icon" style="background:rgba(79,110,247,.1);">👥</div>
+      <div>
+        <div class="stat-val" id="totalStudents">—</div>
+        <div class="stat-label">Студентов →</div>
+      </div>
+    </a>
+    <a href="/teacher/requests" class="stat-card" style="text-decoration:none;cursor:pointer;transition:box-shadow .15s;"
+       onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow=''">
+      <div class="stat-icon" style="background:rgba(245,158,11,.1);">⏳</div>
+      <div>
+        <div class="stat-val" id="pendingReqs">—</div>
+        <div class="stat-label">Заявок ожидает →</div>
+      </div>
+    </a>
+    <!-- Pending reviews stat -->
+    <div class="stat-card" id="reviewsStatCard" style="cursor:pointer;position:relative;transition:box-shadow .15s;"
+         onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow=''"
+         onclick="goToReviews()">
+      <div class="stat-icon" style="background:rgba(239,68,68,.1);">📝</div>
+      <div>
+        <div class="stat-val" style="display:flex;align-items:center;gap:8px;">
+          <span id="pendingReviewsVal">—</span>
+          <span id="reviewsDot" style="display:none;width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
+        </div>
+        <div class="stat-label">На проверке →</div>
+      </div>
+    </div>
+  </div>
+
+  {% if courses %}
+  <div class="t-courses-grid" id="coursesGrid">
+    {% for c in courses %}
+    <div class="t-course-card" data-id="{{ c['id'] }}" onclick="window.location='/teacher/course/{{ c['id'] }}'" style="cursor:pointer;">
+      <div class="t-course-card-head">
+        <div>
+          <h3>{{ c['title'] }}</h3>
+          {% if c['description'] %}<p style="font-size:.82rem;color:var(--mid);margin-top:4px;">{{ c['description'][:80] }}{% if c['description']|length > 80 %}…{% endif %}</p>{% endif %}
+        </div>
+        <span class="badge {% if c['is_open'] %}badge-green{% else %}badge-amber{% endif %}">
+          {% if c['is_open'] %}🔓 Открытый{% else %}🔒 Закрытый{% endif %}
+        </span>
+      </div>
+      <div class="t-meta-row">
+        <div class="t-meta-item">👥 <span class="students-count-{{ c['id'] }}">—</span> студ.</div>
+        <div class="t-meta-item">📦 <span class="blocks-count-{{ c['id'] }}">—</span> блоков</div>
+      </div>
+      <div class="t-card-actions">
+        <a href="/teacher/course/{{ c['id'] }}" class="btn btn-teal btn-sm" style="flex:1;justify-content:center;" onclick="event.stopPropagation()">Управление</a>
+        <a href="/teacher/builder/{{ c['id'] }}" class="btn btn-teal-ghost btn-sm" onclick="event.stopPropagation()">✏️ Редактор</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="t-empty card">
+    <div class="t-empty-icon">📭</div>
+    <h3 style="margin-bottom:8px;">Курсов пока нет</h3>
+    <p style="margin-bottom:20px;">Создайте первый курс с помощью конструктора</p>
+    <a href="/teacher/builder" class="btn btn-teal">Создать первый курс</a>
+  </div>
+  {% endif %}
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Course IDs from server
+const courseIds = [{% for c in courses %}{{ c['id'] }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+let firstCourseWithPending = null;
+
+(async () => {
+  const courses = await api.get('/api/teacher/courses');
+
+  // Unique students across all courses (count distinct)
+  const studentSet = new Set();
+  let totalPendingReqs = 0;
+  let totalPendingReviews = 0;
+
+  for (const c of courses) {
+    const sc = document.querySelector(`.students-count-${c.id}`);
+    const lc = document.querySelector(`.blocks-count-${c.id}`);
+    if (sc) sc.textContent = c.students;
+    if (lc) lc.textContent = c.blocks;
+  }
+
+  // Load pending requests count
+  try {
+    const allReqs = await api.get('/api/teacher/all-requests');
+    const totalPending = allReqs.reduce((s, c) => s + c.pending, 0);
+    document.getElementById('pendingReqs').textContent = totalPending || '0';
+  } catch(e) { document.getElementById('pendingReqs').textContent = '0'; }
+
+  // Load students count (unique)
+  const allStudents = await api.get('/api/teacher/students');
+  document.getElementById('totalStudents').textContent = allStudents.length;
+
+  // Load pending requests + pending reviews for each course
+  for (const id of courseIds) {
+    try {
+      const reqs = await api.get(`/api/teacher/courses/${id}/requests`);
+      totalPendingReqs += reqs.filter(r => r.status === 'pending').length;
+    } catch(e) {}
+
+    try {
+      const hw = await api.get(`/api/teacher/courses/${id}/homework`);
+      const pending = hw.filter(r => r.status === 'submitted').length;
+      totalPendingReviews += pending;
+      if (pending > 0 && !firstCourseWithPending) firstCourseWithPending = id;
+    } catch(e) {}
+  }
+
+  document.getElementById('pendingReqs').textContent = totalPendingReqs || '0';
+  document.getElementById('pendingReviewsVal').textContent = totalPendingReviews;
+  if (totalPendingReviews > 0) {
+    document.getElementById('reviewsDot').style.display = 'inline-block';
+  }
+})();
+
+function goToReviews() {
+  const target = firstCourseWithPending || courseIds[0];
+  if (target) window.location = `/teacher/course/${target}`;
+}
+</script>
+{% endblock %}

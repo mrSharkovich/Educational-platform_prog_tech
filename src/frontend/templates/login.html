@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Вход — EduPath{% endblock %}
+{% block navbar %}{% endblock %}
+
+{% block body %}
+<div class="auth-page">
+  <div class="auth-box">
+    <div class="auth-logo">
+            <a href="/" style="display:inline-block;">
+        <span style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;letter-spacing:-.03em;color:#111827;">Edu<span style="color:#4f6ef7;">Path</span></span>
+      </a>
+      <p>Образовательная платформа</p>
+    </div>
+
+    <h1 class="auth-title">Добро пожаловать</h1>
+    <p class="auth-sub">Войдите в свой аккаунт, чтобы продолжить обучение</p>
+
+    <div class="error-banner" id="error-banner"></div>
+
+    <form class="auth-form" id="loginForm">
+      <div class="field">
+        <label>Логин</label>
+        <input type="text" id="username" placeholder="Ваш логин" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>Пароль</label>
+        <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="submitBtn">
+        Войти
+      </button>
+    </form>
+
+    <p class="auth-footer">
+      Ещё нет аккаунта? <a href="/register">Зарегистрироваться</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('error-banner');
+  err.style.display = 'none';
+  btnLoad(btn, true);
+
+  const res = await api.post('/api/login', {
+    username: document.getElementById('username').value,
+    password: document.getElementById('password').value
+  });
+
+  if (res.success) {
+    toast('Добро пожаловать!', 'success');
+    setTimeout(() => window.location = '/dashboard', 400);
+  } else {
+    err.textContent = res.error || 'Ошибка входа';
+    err.style.display = 'block';
+    btnLoad(btn, false);
+  }
+});
+</script>
+{% endblock %}

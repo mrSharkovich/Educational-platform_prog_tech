@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% block title %}{{ course['title'] }} — EduPath{% endblock %}
+
+{% block body %}
+<div class="app-layout">
+  <div class="course-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <a href="/dashboard" class="sidebar-back">← К курсам</a>
+        <div class="sidebar-title">{{ course['title'] }}</div>
+        <div style="margin-top:14px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <span class="text-xs text-muted">Прогресс курса</span>
+            <span class="text-xs text-muted" id="progressLabel">—</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <div class="lesson-list" id="lessonList">
+        <div class="loading-pulse" style="padding:16px 20px;gap:10px;">
+          <div class="skel" style="height:32px;border-radius:8px;"></div>
+          <div class="skel" style="height:28px;border-radius:8px;opacity:.6;"></div>
+          <div class="skel" style="height:28px;border-radius:8px;opacity:.4;"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CONTENT -->
+    <main class="lesson-content" id="lessonContent">
+      <div class="empty-state">
+        <div class="empty-icon">👈</div>
+        <h3 style="margin-bottom:8px;">Выберите урок или задание</h3>
+        <p>Нажмите на элемент в списке слева</p>
+      </div>
+    </main>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const COURSE_ID = {{ course['id'] }};
+let currentKey = null; // "lesson:ID" or "task:ID"
+
+/* ── Sidebar ─────────────────────────────────────────── */
+async function loadSidebar() {
+  const blocks = await api.get(`/api/courses/${COURSE_ID}/sections`);
+  const list   = document.getElementById('lessonList');
+  list.innerHTML = '';
+
+  for (const b of blocks) {
+    // Block label
+    const label = document.createElement('div');
+    label.className = 'lesson-section-title';
+    label.textContent = b.title;
+    list.appendChild(label);
+
+    for (const it of b.items) {
+      const done = it.is_completed;
+      const key  = `${it.type}:${it.type==='lesson'?it.lesson_id:it.task_id}`;
+      const item = document.createElement('div');
+      item.className = `lesson-item${done?' done':''}`;
+      item.dataset.key = key;
+
+      const icon = it.type === 'lesson' ? '📖' : '✏️';
+      item.innerHTML = `
+        <div class="lesson-check">${done?'✓':''}</div>
+        <span style="font-size:.8rem;margin-right:4px;opacity:.7;">${icon}</span>
+        <span>${escHtml(it.title)}</span>`;
+      item.addEventListener('click', () => openItem(it, key));
+      list.appendChild(item);
+    }
+  }
+  loadProgress();
+}
+
+async function loadProgress() {
+  const d = await api.get(`/api/user/progress?course_id=${COURSE_ID}`);
+  document.getElementById('progressFill').style.width = (d.progress||0)+'%';
+  document.getElementById('progressLabel').textContent = `${d.completed_lessons}/${d.total_lessons}`;
+}
+
+/* ── Open item ───────────────────────────────────────── */
+function openItem(it, key) {
+  currentKey = key;
+  document.querySelectorAll('.lesson-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === key);
+  });
+  if (it.type === 'lesson') loadLesson(it.lesson_id);
+  else                       loadTask(it.task_id);
+}
+
+/* ── Lesson ──────────────────────────────────────────── */
+async function loadLesson(id) {
+  showSkeleton();
+  const lesson = await api.get(`/api/lessons/${id}`);
+  // BUG4 FIX: lesson is marked complete on backend when opened — update sidebar & progress
+  markDone(`lesson:${id}`);
+  loadProgress();
+  renderLesson(lesson);
+}
+
+function renderLesson(lesson) {
+  const mats = lesson.materials?.length ? `
+    <div class="materials-section">
+      <div class="section-title">Материалы</div>
+      ${lesson.materials.map(m => {
+        if (m.type==='video') return `
+          <a href="https://youtube.com/watch?v=${m.youtube_id}" target="_blank" class="material-item">
+            <div class="material-icon video">▶</div>
+            <div><div class="material-title">${escHtml(m.title)}</div><div class="material-type">YouTube видео</div></div>
+          </a>`;
+        return `
+          <a href="/materials/${m.file_path}" target="_blank" class="material-item">
+            <div class="material-icon pdf">📄</div>
+            <div><div class="material-title">${escHtml(m.title)}</div><div class="material-type">PDF документ</div></div>
+          </a>`;
+      }).join('')}
+    </div>` : '';
+
+  document.getElementById('lessonContent').innerHTML = `
+    <div class="lesson-header">
+      <div class="breadcrumb">📖 Урок</div>
+      <h1>${escHtml(lesson.title)}</h1>
+    </div>
+    <div class="lesson-body">${lesson.content.replace(/\n/g,'<br>')}</div>
+    ${mats}`;
+}
+
+/* ── Task ────────────────────────────────────────────── */
+async function loadTask(id) {
+  showSkeleton();
+  const task = await api.get(`/api/tasks/${id}`);
+  renderTask(task);
+}
+
+function renderTask(task) {
+  const typeLabel = { text:'Развёрнутый ответ', short:'Краткий ответ', choice:'Тест', video:'Видео', pdf:'PDF' };
+  const maxAtt  = task.max_attempts ?? 100;
+  const usedAtt = task.attempts_used ?? 0;
+  const remaining = maxAtt - usedAtt;
+  const limitReached = remaining <= 0;
+
+  // Attempts counter chip (only show if limit < 100)
+  const attChip = maxAtt < 100
+    ? `<span style="font-size:.78rem;color:var(--mid);padding:3px 10px;border:1px solid var(--border);
+                    border-radius:20px;margin-left:10px;">
+         Попытки: ${usedAtt} / ${maxAtt}
+       </span>`
+    : '';
+
+  let body = '';
+  if (task.task_type === 'video') {
+    const vid = task.options || '';
+    body = vid ? `<div style="margin-bottom:20px;"><div class="section-title">Видео</div>
+      <a href="https://youtube.com/watch?v=${escHtml(vid)}" target="_blank" class="material-item">
+        <div class="material-icon video">▶</div>
+        <div><div class="material-title">Смотреть видео</div><div class="material-type">YouTube</div></div>
+      </a></div>` : '';
+  } else if (task.task_type === 'pdf') {
+    const path = task.options || '';
+    body = path ? `<div style="margin-bottom:20px;"><div class="section-title">Документ</div>
+      <a href="/materials/${escHtml(path)}" target="_blank" class="material-item">
+        <div class="material-icon pdf">📄</div>
+        <div><div class="material-title">Открыть PDF</div><div class="material-type">Документ</div></div>
+      </a></div>` : '';
+  }
+
+  const correct  = task.answer ? task.answer.is_correct : null;
+  const prevText = task.answer ? escHtml(task.answer.text) : '';
+  const comment  = task.answer ? (task.answer.teacher_comment || '') : '';
+  const commentBlock = comment
+    ? `<div class="teacher-comment" style="margin-top:12px;"><strong>Комментарий преподавателя:</strong><br>${escHtml(comment)}</div>`
+    : '';
+
+  // Decide if student can retry
+  // canRetry = has attempts left AND not already correctly done
+  const alreadyCorrect = correct === 1;
+  const isPending = task.task_type === 'text' && task.answer && correct === null;
+  const canRetry = !alreadyCorrect && !isPending && !limitReached;
+
+  let answerBlock = '';
+
+  if (alreadyCorrect) {
+    // ── Accepted ──
+    answerBlock = `
+      <div class="homework-section">
+        <div class="flex items-center gap-2" style="margin-bottom:10px;">
+          <span class="badge badge-green">✓ Принято</span>
+        </div>
+        <div class="submitted-answer">${prevText}</div>
+        ${commentBlock}
+      </div>`;
+
+  } else if (isPending) {
+    // ── text task awaiting teacher review ──
+    answerBlock = `
+      <div class="homework-section">
+        <div class="flex items-center gap-2" style="margin-bottom:10px;">
+          <span class="badge badge-amber">⏳ На проверке у преподавателя</span>
+        </div>
+        <div class="submitted-answer">${prevText}</div>
+      </div>`;
+
+  } else if (limitReached && !alreadyCorrect) {
+    // ── Attempts exhausted ──
+    const badge = correct === 0
+      ? `<span class="badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);">✕ Лимит попыток исчерпан</span>`
+      : `<span class="badge badge-amber">Лимит попыток исчерпан</span>`;
+    answerBlock = `
+      <div class="homework-section">
+        <div class="flex items-center gap-2" style="margin-bottom:10px;">${badge}</div>
+        ${prevText ? `<div class="submitted-answer">${prevText}</div>` : ''}
+        ${commentBlock}
+      </div>`;
+
+  } else if (task.task_type === 'choice') {
+    // ── Choice: show retry form (with prev wrong badge if applicable) ──
+    const opts = (task.options||'').split('\n').filter(Boolean);
+    const wrongBadge = (correct === 0 && prevText)
+      ? `<div class="flex items-center gap-2" style="margin-bottom:10px;">
+           <span class="badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);">✕ Неверно — попробуйте ещё раз</span>
+         </div>
+         <div class="submitted-answer" style="margin-bottom:12px;">Ваш ответ: ${prevText}</div>`
+      : '';
+    answerBlock = `
+      <div class="homework-section">
+        ${wrongBadge}
+        <h3>Выберите ответ</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+          ${opts.map(o=>`
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;transition:border-color .15s;"
+              onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              <input type="radio" name="task_choice" value="${escHtml(o)}" style="accent-color:var(--accent);">
+              ${escHtml(o)}
+            </label>`).join('')}
+        </div>
+        <button class="btn btn-primary" onclick="submitTaskChoice(${task.id})">Ответить</button>
+      </div>`;
+
+  } else if (task.task_type === 'text' && correct === 0) {
+    // ── text rejected → allow new attempt ──
+    answerBlock = `
+      <div class="homework-section">
+        <div class="flex items-center gap-2" style="margin-bottom:10px;">
+          <span class="badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);">✕ Отклонено — попробуйте ещё раз</span>
+        </div>
+        ${commentBlock}
+        <div class="submitted-answer" style="margin-bottom:12px;margin-top:8px;">${prevText}</div>
+        <div class="field" style="margin-bottom:16px;">
+          <textarea id="taskAnswer" rows="6" placeholder="Развёрнутый ответ..."></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="submitTaskText(${task.id})">Отправить снова</button>
+      </div>`;
+
+  } else {
+    // ── Fresh form (no answer yet, or short wrong) ──
+    const wrongBadge = (correct === 0 && prevText)
+      ? `<div class="flex items-center gap-2" style="margin-bottom:10px;">
+           <span class="badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);">✕ Неверно — попробуйте ещё раз</span>
+         </div>
+         <div class="submitted-answer" style="margin-bottom:12px;">${prevText}</div>`
+      : '';
+    const ph   = task.task_type === 'short' ? 'Краткий ответ...' : 'Развёрнутый ответ...';
+    const rows = task.task_type === 'short' ? 2 : 6;
+    answerBlock = `
+      <div class="homework-section">
+        ${wrongBadge}
+        <h3>Ваш ответ</h3>
+        <div class="field" style="margin-bottom:16px;">
+          <textarea id="taskAnswer" rows="${rows}" placeholder="${ph}"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="submitTaskText(${task.id})">Отправить</button>
+      </div>`;
+  }
+
+  document.getElementById('lessonContent').innerHTML = `
+    <div class="lesson-header">
+      <div class="breadcrumb" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+        ✏️ ${typeLabel[task.task_type]||'Задание'}${attChip}
+      </div>
+      <h1>${escHtml(task.question)}</h1>
+    </div>
+    ${body}${answerBlock}`;
+}
+
+/* ── Submit task ─────────────────────────────────────── */
+async function submitTaskText(taskId) {
+  const el = document.getElementById('taskAnswer');
+  const answer = el?.value.trim();
+  if (!answer) { toast('Введите ответ', 'error'); return; }
+  const res = await api.post(`/api/tasks/${taskId}/answer`, { answer });
+  if (res.success) {
+    if (res.is_correct === null || res.is_correct === undefined) {
+      toast('Ответ отправлен на проверку преподавателю', 'success');
+    } else if (res.is_correct === 1) {
+      toast('Верно! ✓', 'success');
+      markDone(`task:${taskId}`);
+    } else {
+      const rem = res.attempts_remaining;
+      toast(rem > 0 ? `Неверно. Осталось попыток: ${rem}` : 'Неверно. Попытки исчерпаны', 'error');
+    }
+    loadTask(taskId);
+    loadProgress();
+  } else toast(res.error || 'Ошибка', 'error');
+}
+
+async function submitTaskChoice(taskId) {
+  const sel = document.querySelector('input[name=task_choice]:checked');
+  if (!sel) { toast('Выберите вариант', 'error'); return; }
+  const res = await api.post(`/api/tasks/${taskId}/answer`, { answer: sel.value });
+  if (res.success) {
+    if (res.is_correct === 1) {
+      toast('Верно! ✓', 'success');
+      markDone(`task:${taskId}`);
+    } else {
+      const rem = res.attempts_remaining;
+      toast(rem > 0 ? `Неверно. Осталось попыток: ${rem}` : 'Неверно. Попытки исчерпаны', 'error');
+    }
+    loadTask(taskId);
+    loadProgress();
+  } else toast(res.error || 'Ошибка', 'error');
+}
+
+function markDone(key) {
+  const el = document.querySelector(`.lesson-item[data-key="${key}"]`);
+  if (el) { el.classList.add('done'); el.querySelector('.lesson-check').textContent = '✓'; }
+}
+
+function showSkeleton() {
+  document.getElementById('lessonContent').innerHTML = `
+    <div class="loading-pulse">
+      <div class="skel" style="height:14px;width:100px;"></div>
+      <div class="skel" style="height:32px;width:75%;"></div>
+      <div class="skel" style="height:12px;"></div>
+      <div class="skel" style="height:12px;width:85%;"></div>
+    </div>`;
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadSidebar();
+</script>
+{% endblock %}

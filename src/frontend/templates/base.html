@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}EduPath{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+
+{% block navbar %}
+<nav class="nav">
+  {% if g.user %}
+    <a href="/dashboard" class="nav-logo">Edu<span>Path</span></a>
+  {% else %}
+    <a href="/" class="nav-logo">Edu<span>Path</span></a>
+  {% endif %}
+
+  <div class="nav-links">
+    <a href="/catalog" class="nav-link {% if request.path == '/catalog' %}active{% endif %}">Каталог</a>
+    {% if g.user %}
+      <a href="/dashboard" class="nav-link {% if request.path == '/dashboard' %}active{% endif %}">Мои курсы</a>
+      <div class="nav-sep"></div>
+      <div class="user-chip" onclick="confirmLogout('/logout')" title="Выйти">
+        <div class="avatar">{{ g.user['first_name'][0] }}</div>
+        <span class="user-name">{{ g.user['first_name'] }}</span>
+      </div>
+    {% else %}
+      <a href="/login"    class="nav-link">Войти</a>
+      <a href="/register" class="btn btn-primary btn-sm">Начать учёбу →</a>
+    {% endif %}
+  </div>
+</nav>
+{% endblock %}
+
+{% block body %}{% endblock %}
+
+<!-- Confirm logout modal -->
+<div class="modal-overlay" id="logoutModal" onclick="closeLogoutModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:380px;">
+    <div class="modal-icon">👋</div>
+    <h2>Выйти из аккаунта?</h2>
+    <p>Вы уверены, что хотите выйти? Ваш прогресс сохранён.</p>
+    <div class="modal-actions">
+      <a id="logoutConfirmLink" href="#" class="btn btn-primary">Да, выйти</a>
+      <button class="btn btn-ghost" onclick="closeLogoutModal()">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm leave (when logged in, navigating to login/register) -->
+<div class="modal-overlay" id="leaveModal" onclick="closeLeaveModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:380px;">
+    <div class="modal-icon">🔄</div>
+    <h2>Сменить аккаунт?</h2>
+    <p>Вы уже вошли в систему. Перейти на эту страницу и выйти из текущего аккаунта?</p>
+    <div class="modal-actions">
+      <a id="leaveConfirmLink" href="#" class="btn btn-primary">Да, продолжить</a>
+      <button class="btn btn-ghost" onclick="closeLeaveModal()">Остаться</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script>
+function confirmLogout(url) {
+  document.getElementById('logoutConfirmLink').href = url;
+  document.getElementById('logoutModal').classList.add('show');
+}
+function closeLogoutModal() {
+  document.getElementById('logoutModal').classList.remove('show');
+}
+function confirmLeave(e, url) {
+  e.preventDefault();
+  document.getElementById('leaveConfirmLink').href = url;
+  document.getElementById('leaveModal').classList.add('show');
+  return false;
+}
+function closeLeaveModal() {
+  document.getElementById('leaveModal').classList.remove('show');
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
