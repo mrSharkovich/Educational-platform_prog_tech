@@ -1029,6 +1029,14 @@ def submit_task_answer(task_id):
     is_correct = None
     if task['task_type'] in ('choice', 'short') and task['correct_answer']:
         is_correct = 1 if answer_text.lower() == task['correct_answer'].strip().lower() else 0
+    elif task['task_type'] == 'match' and task['correct_answer']:
+        import json as _json
+        try:
+            correct = _json.loads(task['correct_answer'])
+            submitted = _json.loads(answer_text)
+            is_correct = 1 if submitted == correct else 0
+        except Exception:
+            is_correct = 0
     # text tasks: is_correct stays None until teacher reviews
 
     # Record this attempt in history
@@ -1140,8 +1148,7 @@ def check_and_create_tables(db):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER NOT NULL,
             question TEXT NOT NULL,
-            task_type TEXT NOT NULL DEFAULT "text"
-                CHECK(task_type IN ("text","short","choice","video","pdf")),
+            task_type TEXT NOT NULL DEFAULT "text",
             options TEXT DEFAULT "",
             correct_answer TEXT DEFAULT "")''',
         'task_answers': '''CREATE TABLE task_answers (

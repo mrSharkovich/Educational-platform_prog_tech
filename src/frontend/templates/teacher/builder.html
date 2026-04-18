@@ -481,6 +481,7 @@ const TASK_TYPES = [
   { id: 'choice', icon: '☑️', label: 'Тест (выбор)' },
   { id: 'video',  icon: '▶️', label: 'Видео + вопрос' },
   { id: 'pdf',    icon: '📄', label: 'PDF + вопрос' },
+  { id: 'match',  icon: '🔗', label: 'Сопоставление' },
 ];
 
 function renderTaskEditor(it) {
@@ -527,6 +528,24 @@ function renderTaskEditor(it) {
           <input type="text" id="taskCorrect" value="${escHtml(t.correct_answer||'')}"
             placeholder="Точный текст правильного варианта">
         </div>
+      </div>` : ''}
+
+      ${type==='match' ? `
+      <div>
+        <div class="editor-section-label">Пары для сопоставления</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;padding:0 2px;">
+          <span style="font-size:.75rem;color:var(--mid);font-weight:600;">Левая колонка</span>
+          <span style="font-size:.75rem;color:var(--mid);font-weight:600;">Правая колонка</span>
+        </div>
+        <div id="matchPairsList">
+          ${(()=>{
+            let pairs=[];
+            try{ pairs=JSON.parse(t.options||'[]'); }catch(e){ pairs=[]; }
+            if(!pairs.length) pairs=[{left:'',right:''},{left:'',right:''}];
+            return pairs.map((p,i)=>matchPairRow(p.left,p.right,i)).join('');
+          })()}
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addMatchPair()" style="margin-top:6px;">+ Пара</button>
       </div>` : ''}
 
       ${type==='short' ? `
@@ -580,6 +599,33 @@ function deleteOption(i) {
   if (items[i]) items[i].remove();
 }
 
+function matchPairRow(left, right, i) {
+  return `<div class="match-pair-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:6px;">
+    <input type="text" class="match-left" value="${escHtml(left)}" placeholder="Термин ${i+1}" style="width:100%;">
+    <input type="text" class="match-right" value="${escHtml(right)}" placeholder="Определение ${i+1}" style="width:100%;">
+    <span class="option-del" onclick="deleteMatchPair(this)" style="align-self:center;">✕</span>
+  </div>`;
+}
+
+function addMatchPair() {
+  const list = document.getElementById('matchPairsList');
+  const i = list.children.length;
+  list.insertAdjacentHTML('beforeend', matchPairRow('', '', i));
+}
+
+function deleteMatchPair(btn) {
+  const rows = document.querySelectorAll('.match-pair-row');
+  if (rows.length <= 2) { toast('Минимум 2 пары', 'error'); return; }
+  btn.closest('.match-pair-row').remove();
+}
+
+function getMatchPairs() {
+  return [...document.querySelectorAll('.match-pair-row')].map(row => ({
+    left:  row.querySelector('.match-left').value.trim(),
+    right: row.querySelector('.match-right').value.trim()
+  })).filter(p => p.left || p.right);
+}
+
 async function saveTask() {
   if (!currentItem) return;
   const { blockIdx, itemIdx } = currentItem;
@@ -593,9 +639,19 @@ async function saveTask() {
   const mediaEl      = document.getElementById('taskMedia');
   const correctEl    = document.getElementById('taskCorrect');
   const maxAttEl     = document.getElementById('taskMaxAttempts');
-  t.options        = t.task_type === 'choice' ? getOptions().join('\n')
-                   : (mediaEl ? mediaEl.value : t.options || '');
-  t.correct_answer = correctEl ? correctEl.value : '';
+
+  if (t.task_type === 'match') {
+    const pairs = getMatchPairs();
+    if (pairs.length < 2) { toast('Добавьте минимум 2 пары', 'error'); return; }
+    if (pairs.some(p => !p.left || !p.right)) { toast('Заполните все поля пар', 'error'); return; }
+    t.options        = JSON.stringify(pairs);
+    t.correct_answer = JSON.stringify(pairs.map(p => p.right));
+  } else {
+    t.options        = t.task_type === 'choice' ? getOptions().join('\n')
+                     : (mediaEl ? mediaEl.value : t.options || '');
+    t.correct_answer = correctEl ? correctEl.value : '';
+  }
+
   t.max_attempts   = maxAttEl ? Math.max(1, parseInt(maxAttEl.value) || 100) : 100;
   it.title = question;
 

@@ -139,7 +139,7 @@ async function loadTask(id) {
 }
 
 function renderTask(task) {
-  const typeLabel = { text:'Развёрнутый ответ', short:'Краткий ответ', choice:'Тест', video:'Видео', pdf:'PDF' };
+  const typeLabel = { text:'Развёрнутый ответ', short:'Краткий ответ', choice:'Тест', video:'Видео', pdf:'PDF', match:'Сопоставление' };
   const maxAtt  = task.max_attempts ?? 100;
   const usedAtt = task.attempts_used ?? 0;
   const remaining = maxAtt - usedAtt;
@@ -182,6 +182,87 @@ function renderTask(task) {
   const alreadyCorrect = correct === 1;
   const isPending = task.task_type === 'text' && task.answer && correct === null;
   const canRetry = !alreadyCorrect && !isPending && !limitReached;
+
+  // ── Match task: inject answer block directly ──
+  if (task.task_type === 'match') {
+    let pairs = [];
+    try { pairs = JSON.parse(task.options || '[]'); } catch(e) { pairs = []; }
+
+    if (alreadyCorrect) {
+      // Show correct pairs
+      const pairsHtml = pairs.map(p => `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <div style="padding:8px 12px;background:rgba(16,185,129,.08);border-radius:var(--r-sm);">${escHtml(p.left)}</div>
+          <div style="padding:8px 12px;background:rgba(16,185,129,.08);border-radius:var(--r-sm);">${escHtml(p.right)}</div>
+        </div>`).join('');
+      document.getElementById('lessonContent').innerHTML = `
+        <div class="lesson-header">
+          <div class="breadcrumb">✏️ Сопоставление${attChip}</div>
+          <h1>${escHtml(task.question)}</h1>
+        </div>
+        <div class="homework-section">
+          <div class="flex items-center gap-2" style="margin-bottom:12px;"><span class="badge badge-green">✓ Принято</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px;">
+            <span style="font-size:.75rem;font-weight:600;color:var(--mid);">Левая колонка</span>
+            <span style="font-size:.75rem;font-weight:600;color:var(--mid);">Правая колонка</span>
+          </div>
+          ${pairsHtml}
+          ${commentBlock}
+        </div>`;
+      return;
+    }
+
+    if (limitReached) {
+      document.getElementById('lessonContent').innerHTML = `
+        <div class="lesson-header">
+          <div class="breadcrumb">✏️ Сопоставление${attChip}</div>
+          <h1>${escHtml(task.question)}</h1>
+        </div>
+        <div class="homework-section">
+          <span class="badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);">✕ Лимит попыток исчерпан</span>
+          ${commentBlock}
+        </div>`;
+      return;
+    }
+
+    // Shuffle right column
+    const rightItems = pairs.map(p => p.right);
+    const shuffled   = [...rightItems].sort(() => Math.random() - 0.5);
+
+    const leftCol  = pairs.map(p => `
+      <div class="match-left-item" style="padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);">
+        ${escHtml(p.left)}
+      </div>`).join('');
+
+    const rightCol = shuffled.map(r => `
+      <div class="match-right-item" draggable="true"
+        style="padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-sm);cursor:grab;background:var(--surface);display:flex;align-items:center;gap:8px;">
+        <span style="opacity:.4;font-size:.8rem;">⠿</span>${escHtml(r)}
+      </div>`).join('');
+
+    const wrongBadge = (correct === 0 && prevText)
+      ? `<div style="margin-bottom:10px;"><span class="badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);">✕ Неверно — попробуйте ещё раз</span></div>`
+      : '';
+
+    document.getElementById('lessonContent').innerHTML = `
+      <div class="lesson-header">
+        <div class="breadcrumb" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+          ✏️ Сопоставление${attChip}
+        </div>
+        <h1>${escHtml(task.question)}</h1>
+      </div>
+      <div class="homework-section">
+        ${wrongBadge}
+        <h3>Перетащите правую колонку в нужном порядке</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;align-items:start;">
+          <div style="display:flex;flex-direction:column;gap:8px;">${leftCol}</div>
+          <div id="matchDropZone" style="display:flex;flex-direction:column;gap:8px;">${rightCol}</div>
+        </div>
+        <button class="btn btn-primary" onclick="submitMatchAnswer(${task.id})">Ответить</button>
+      </div>`;
+    initMatchDragDrop();
+    return;
+  }
 
   let answerBlock = '';
 
@@ -313,6 +394,61 @@ async function submitTaskChoice(taskId) {
   const sel = document.querySelector('input[name=task_choice]:checked');
   if (!sel) { toast('Выберите вариант', 'error'); return; }
   const res = await api.post(`/api/tasks/${taskId}/answer`, { answer: sel.value });
+  if (res.success) {
+    if (res.is_correct === 1) {
+      toast('Верно! ✓', 'success');
+      markDone(`task:${taskId}`);
+    } else {
+      const rem = res.attempts_remaining;
+      toast(rem > 0 ? `Неверно. Осталось попыток: ${rem}` : 'Неверно. Попытки исчерпаны', 'error');
+    }
+    loadTask(taskId);
+    loadProgress();
+  } else toast(res.error || 'Ошибка', 'error');
+}
+
+function initMatchDragDrop() {
+  const zone = document.getElementById('matchDropZone');
+  if (!zone) return;
+  let dragged = null;
+
+  zone.querySelectorAll('.match-right-item').forEach(item => {
+    item.addEventListener('dragstart', e => {
+      dragged = item;
+      setTimeout(() => item.style.opacity = '.4', 0);
+    });
+    item.addEventListener('dragend', () => {
+      item.style.opacity = '';
+      dragged = null;
+      zone.querySelectorAll('.match-right-item').forEach(el => el.style.borderColor = '');
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      item.style.borderColor = 'var(--accent)';
+    });
+    item.addEventListener('dragleave', () => { item.style.borderColor = ''; });
+    item.addEventListener('drop', e => {
+      e.preventDefault();
+      item.style.borderColor = '';
+      if (dragged && dragged !== item) {
+        const allItems = [...zone.querySelectorAll('.match-right-item')];
+        const fromIdx  = allItems.indexOf(dragged);
+        const toIdx    = allItems.indexOf(item);
+        if (fromIdx < toIdx) item.after(dragged);
+        else item.before(dragged);
+      }
+    });
+  });
+}
+
+async function submitMatchAnswer(taskId) {
+  const zone = document.getElementById('matchDropZone');
+  if (!zone) return;
+  const order = [...zone.querySelectorAll('.match-right-item')].map(el =>
+    el.textContent.replace('⠿', '').trim()
+  );
+  const answer = JSON.stringify(order);
+  const res = await api.post(`/api/tasks/${taskId}/answer`, { answer });
   if (res.success) {
     if (res.is_correct === 1) {
       toast('Верно! ✓', 'success');
