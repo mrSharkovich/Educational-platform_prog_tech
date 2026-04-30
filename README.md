@@ -12,7 +12,6 @@
 - [Стек технологий](#стек-технологий)
 - [Структура проекта](#структура-проекта)
 - [Возможности](#возможности)
-- [Тестовые аккаунты](#тестовые-аккаунты)
 - [Конфигурация](#конфигурация)
 - [API — Краткий справочник](#api--краткий-справочник)
 - [База данных](#база-данных)
@@ -53,6 +52,7 @@ python src\backend\app.py
 | Frontend | Vanilla JS (ES2020+) | — |
 | CSS | Custom Properties, без фреймворков | — |
 | Шрифты | Syne, DM Sans | Google Fonts |
+| Экспорт | openpyxl | 3.1+ |
 
 Нет ORM. Нет npm. Нет сборщиков. Только Python и браузер.
 
@@ -65,7 +65,10 @@ Educational-platform_prog_tech/src
 ├── backend/
 │   ├── app.py               # Flask-приложение: маршруты, API, логика, инициализация БД
 │   ├── database.py          # Подключение к SQLite через контекст приложения Flask
-│   └── requirements.txt     # Python-зависимости (только flask)
+│   ├── stats_export.py      # Генерация Excel-отчёта по прогрессу студентов
+│   ├── materials/           # Хранилище PDF-файлов для заданий
+│   └── instance/
+│       └── learning_platform.db   # SQLite база данных (создаётся автоматически)
 │
 ├── frontend/
 │   ├── static/
@@ -96,6 +99,7 @@ Educational-platform_prog_tech/src
 ├── .gitignore
 ├── LICENSE
 ├── README.md
+├── db_filling.md
 └── requirements.txt
 ```
 
@@ -107,8 +111,9 @@ Educational-platform_prog_tech/src
 - Регистрация и вход; каталог открытых и закрытых курсов
 - Заявка на закрытый курс; повторная заявка после отклонения
 - Прохождение уроков (текст + YouTube/PDF материалы)
-- 5 типов заданий: развёрнутый, краткий, тест, видео, PDF
+- 6 типов заданий: развёрнутый, краткий, тест, видео, PDF, сопоставление
 - Автопроверка краткого ответа и теста; ручная проверка преподавателем
+- Интерактивное drag-and-drop задание на сопоставление терминов и определений
 - Лимит попыток; повтор задания при неверном ответе
 - Прогресс курса; комментарии преподавателя к ответам
 
@@ -120,6 +125,7 @@ Educational-platform_prog_tech/src
 - Управление студентами: прогресс, отчисление
 - Заявки: одобрение/отклонение с уведомлением студента
 - Статистика с красными точками на непроверенных заданиях
+- Экспорт статистики курса в Excel — прогресс всех студентов по каждому модулю
 - Удаление курса с подтверждением
 
 ---
@@ -173,9 +179,13 @@ GET  /api/teacher/homework/<id>/history
 # Студенты и заявки
 GET    /api/teacher/students
 GET    /api/teacher/all-requests
+GET    /api/teacher/courses/<id>/students
 DELETE /api/teacher/courses/<id>/students/<uid>
 POST   /api/teacher/requests/<id>/approve
 POST   /api/teacher/requests/<id>/reject
+
+# Экспорт статистики
+GET  /api/teacher/courses/<id>/stats/export   Скачать Excel-отчёт по курсу
 
 # Прохождение курса
 GET  /api/courses/<id>/sections
@@ -199,5 +209,4 @@ GET  /api/user/progress
 | Доступ | `user_courses`, `course_requests` |
 
 ---
-
 

@@ -12,6 +12,10 @@
         {% if course['is_open'] %}🔓 Открытый{% else %}🔒 Закрытый{% endif %}
       </span>
       <a href="/teacher/builder/{{ course['id'] }}" class="btn btn-teal-ghost btn-sm">✏️ Редактор курса</a>
+      <a href="/api/teacher/courses/{{ course['id'] }}/stats/export"
+         class="btn btn-ghost btn-sm" title="Скачать статистику прохождения в Excel">
+        📊 Скачать статистику
+      </a>
     </div>
 
     <div class="t-tabs">

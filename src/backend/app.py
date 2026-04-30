@@ -2,8 +2,10 @@ import os
 import sqlite3
 
 from flask import (Flask, render_template, request, redirect,
-                   url_for, session, g, flash, jsonify, send_from_directory)
+                   url_for, session, g, flash, jsonify, send_from_directory,
+                   send_file)
 from database import get_db, init_app
+from stats_export import build_course_stats_xlsx
 
 app = Flask(__name__,
             template_folder='../frontend/templates',
@@ -816,6 +818,27 @@ def api_teacher_students(course_id):
                        'first_name': s['first_name'], 'last_name': s['last_name'],
                        'completed': done, 'total': total, 'progress': progress})
     return jsonify(result)
+
+@app.route('/api/teacher/courses/<int:course_id>/stats/export')
+def api_teacher_stats_export(course_id):
+    err = _require_teacher()
+    if err: return err
+    db = get_db()
+    if not db.execute('SELECT 1 FROM courses WHERE id=? AND teacher_id=?',
+                      (course_id, g.teacher['id'])).fetchone():
+        return jsonify({'error': 'Not found'}), 404
+    try:
+        xlsx_bytes, filename = build_course_stats_xlsx(db, course_id)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    import io
+    return send_file(
+        io.BytesIO(xlsx_bytes),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
 
 @app.route('/api/teacher/courses/<int:course_id>/students/<int:user_id>', methods=['DELETE'])
 def api_teacher_unenroll(course_id, user_id):
