@@ -1,0 +1,273 @@
+{% extends "teacher/base.html" %}
+{% block title %}Проверка заданий{% endblock %}
+
+{% block body %}
+<div class="t-manage-layout">
+
+  <div class="t-manage-header">
+    <div class="t-manage-header-top">
+      <a href="/teacher/dashboard" style="color:var(--mid);font-size:.82rem;display:flex;align-items:center;gap:4px;">← Мои курсы</a>
+      <h1>Проверка заданий</h1>
+    </div>
+    <!-- Course selector pills -->
+    <div id="hwCourseSelector" style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 0 0;"></div>
+  </div>
+
+  <div id="hwContent">
+    <div class="loading-pulse" style="padding:20px;">
+      <div class="skel" style="height:40px;"></div>
+      <div class="skel" style="height:40px;opacity:.6;margin-top:8px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Review Drawer -->
+<div class="drawer-overlay" id="drawerOverlay">
+  <div class="drawer" onclick="event.stopPropagation()">
+    <div class="drawer-head">
+      <h3 id="drawerTitle">Проверка задания</h3>
+      <div class="drawer-close" onclick="closeDrawer()">✕</div>
+    </div>
+    <div class="drawer-body">
+      <div>
+        <div class="drawer-label">Студент</div>
+        <div id="drawerStudent" style="font-weight:600;"></div>
+      </div>
+      <div>
+        <div class="drawer-label">Блок</div>
+        <div id="drawerBlock" style="color:var(--mid);font-size:.85rem;"></div>
+      </div>
+      <div>
+        <div class="drawer-label" id="drawerLessonLabel">Задание</div>
+        <div id="drawerLesson" style="color:var(--mid);font-size:.88rem;font-weight:600;"></div>
+      </div>
+      <div>
+        <div class="drawer-label">Ответ студента</div>
+        <div class="drawer-answer-box" id="drawerAnswer"></div>
+      </div>
+      <div id="drawerHistoryWrap" style="display:none;">
+        <div class="drawer-label">История комментариев</div>
+        <div id="drawerHistory" style="display:flex;flex-direction:column;gap:8px;max-height:180px;overflow-y:auto;"></div>
+      </div>
+      <div id="drawerCommentWrap">
+        <div class="drawer-label">Новый комментарий</div>
+        <textarea class="field input" id="drawerComment"
+          style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px;width:100%;min-height:90px;resize:vertical;color:var(--ink);font-size:.9rem;"
+          placeholder="Напишите комментарий для студента..."></textarea>
+      </div>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-teal"   id="drawerApprove" onclick="submitReview('checked')">✓ Принять</button>
+      <button class="btn btn-danger" id="drawerReject"  onclick="submitReview('rejected')">✕ Отклонить</button>
+      <button class="btn btn-ghost"  onclick="closeDrawer()" style="margin-left:auto;">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.course-tab-btn {
+  position: relative;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--mid);
+  font-size: .82rem;
+  cursor: pointer;
+  transition: all .15s;
+  font-weight: 500;
+}
+.course-tab-btn:hover  { border-color: #0d9488; color: #0d9488; }
+.course-tab-btn.active { border-color: #0d9488; background: rgba(13,148,136,.1); color: #0d9488; }
+.course-tab-dot {
+  position: absolute;
+  top: -3px; right: -3px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid var(--bg);
+}
+.comment-bubble {
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  font-size: .84rem;
+  line-height: 1.45;
+}
+.comment-bubble.teacher { background: rgba(13,148,136,.08); border: 1px solid rgba(13,148,136,.2); }
+.comment-bubble .bubble-meta { font-size: .72rem; color: var(--mid); margin-bottom: 4px; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Стартовый курс из query-параметра ?course=ID (опционально)
+const params          = new URLSearchParams(window.location.search);
+let selectedCourseId  = parseInt(params.get('course')) || null;
+let allCourses        = [];
+let currentAnswerId   = null;
+let currentSource     = 'lesson_hw';
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Загрузка заданий всех курсов ──────────────────────────────
+async function loadAllCourseHomework() {
+  const courses = await api.get('/api/teacher/courses');
+
+  allCourses = [];
+  for (const c of courses) {
+    const rows    = await api.get(`/api/teacher/courses/${c.id}/homework`);
+    const pending = rows.filter(r => r.status === 'submitted').length;
+    allCourses.push({ id: c.id, title: c.title, pending, rows });
+  }
+
+  // Если курс из URL не в списке — берём первый
+  if (!selectedCourseId || !allCourses.find(c => c.id === selectedCourseId)) {
+    selectedCourseId = allCourses.length ? allCourses[0].id : null;
+  }
+
+  renderSelector();
+  if (selectedCourseId) renderHomeworkTable(selectedCourseId);
+}
+
+function renderSelector() {
+  document.getElementById('hwCourseSelector').innerHTML = allCourses.map(c => `
+    <button class="course-tab-btn ${c.id === selectedCourseId ? 'active' : ''}"
+            onclick="selectCourse(${c.id})" id="courseBtn_${c.id}">
+      ${escHtml(c.title)}
+      ${c.pending > 0 ? '<span class="course-tab-dot"></span>' : ''}
+    </button>`).join('');
+}
+
+function selectCourse(id) {
+  selectedCourseId = id;
+  document.querySelectorAll('.course-tab-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`courseBtn_${id}`);
+  if (btn) btn.classList.add('active');
+  renderHomeworkTable(id);
+}
+
+function renderHomeworkTable(courseId) {
+  const course = allCourses.find(c => c.id === courseId);
+  const rows   = course ? course.rows : [];
+  const hwEl   = document.getElementById('hwContent');
+
+  if (!rows.length) {
+    hwEl.innerHTML = `<div class="t-empty" style="padding:40px 20px;"><div class="t-empty-icon">📭</div><p>Заданий на проверку нет</p></div>`;
+    return;
+  }
+
+  const statusLabel = s => s === 'checked'
+    ? '<span class="badge badge-green">Принято</span>'
+    : s === 'rejected'
+      ? '<span class="badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.3);">Отклонено</span>'
+      : '<span class="badge badge-amber">На проверке</span>';
+
+  hwEl.innerHTML = `
+    <div style="overflow-x:auto;padding:0 0 16px;">
+    <table class="hw-table">
+      <thead><tr>
+        <th>Студент</th><th>Блок / Задание</th><th>Ответ</th><th>Дата</th><th>Статус</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => {
+          const blockLabel  = r.block_title
+            ? `<span style="font-size:.75rem;color:var(--mid);">${escHtml(r.block_title)} → </span>`
+            : '';
+          const isReviewed  = r.status === 'checked' || r.status === 'rejected';
+          const actionBtn   = isReviewed
+            ? `<button class="btn btn-ghost btn-sm comment-btn"
+                data-id="${r.id}" data-source="${r.source||'lesson_hw'}"
+                data-student="${escHtml(r.first_name+' '+r.last_name)}"
+                data-block="${escHtml(r.block_title||'')}"
+                data-lesson="${escHtml(r.lesson_title)}"
+                data-answer="${escHtml(r.answer_text||'')}"
+                data-comment="${escHtml(r.teacher_comment||'')}">💬 Комментарий</button>`
+            : `<button class="btn btn-teal-ghost btn-sm review-btn"
+                data-id="${r.id}" data-source="${r.source||'lesson_hw'}"
+                data-student="${escHtml(r.first_name+' '+r.last_name)}"
+                data-block="${escHtml(r.block_title||'')}"
+                data-lesson="${escHtml(r.lesson_title)}"
+                data-answer="${escHtml(r.answer_text||'')}"
+                data-comment="${escHtml(r.teacher_comment||'')}">Проверить</button>`;
+          return `
+          <tr>
+            <td><strong>${escHtml(r.first_name)} ${escHtml(r.last_name)}</strong><br>
+                <span style="font-size:.78rem;color:var(--mid);">@${escHtml(r.login)}</span></td>
+            <td style="max-width:200px;">${blockLabel}${escHtml(r.lesson_title)}</td>
+            <td><div class="hw-answer-preview">${escHtml(r.answer_text||'')}</div></td>
+            <td style="white-space:nowrap;font-size:.8rem;color:var(--mid);">${(r.submitted_at||'').slice(0,16)}</td>
+            <td>${statusLabel(r.status)}</td>
+            <td>${actionBtn}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`;
+}
+
+// ── Drawer ────────────────────────────────────────────────────
+async function openDrawer(id, source, student, block, lesson, answer, comment) {
+  currentAnswerId = id;
+  currentSource   = source || 'lesson_hw';
+  const isTask    = source === 'task';
+  document.getElementById('drawerTitle').textContent       = isTask ? 'Проверка задания' : 'Проверка домашнего задания';
+  document.getElementById('drawerLessonLabel').textContent = isTask ? 'Задание' : 'Урок';
+  document.getElementById('drawerStudent').textContent     = student;
+  document.getElementById('drawerBlock').textContent       = block || '—';
+  document.getElementById('drawerLesson').textContent      = lesson;
+  document.getElementById('drawerAnswer').textContent      = answer;
+  document.getElementById('drawerComment').value           = '';
+
+  const histWrap = document.getElementById('drawerHistoryWrap');
+  const histEl   = document.getElementById('drawerHistory');
+  try {
+    const hist = await api.get(`/api/teacher/homework/${id}/history`);
+    if (hist.length) {
+      histEl.innerHTML = hist.map(h => `
+        <div class="comment-bubble teacher">
+          <div class="bubble-meta">👨‍🏫 Преподаватель · ${(h.created_at||'').slice(0,16)}</div>
+          ${escHtml(h.comment)}
+        </div>`).join('');
+      histWrap.style.display = '';
+    } else {
+      histWrap.style.display = 'none';
+    }
+  } catch(e) { histWrap.style.display = 'none'; }
+
+  document.getElementById('drawerOverlay').classList.add('show');
+}
+
+function closeDrawer() { document.getElementById('drawerOverlay').classList.remove('show'); }
+
+async function submitReview(status) {
+  const comment = document.getElementById('drawerComment').value;
+  const btn     = status === 'checked'
+    ? document.getElementById('drawerApprove')
+    : document.getElementById('drawerReject');
+  btnLoad(btn, true);
+  const res = await api.post(`/api/teacher/homework/${currentAnswerId}/review`,
+    { status, comment, source: currentSource });
+  btnLoad(btn, false);
+  if (res.success) {
+    toast('Сохранено!', 'success');
+    closeDrawer();
+    loadAllCourseHomework();
+  } else toast(res.error, 'error');
+}
+
+// Постоянный делегированный обработчик — не теряется при перерисовке таблицы
+document.getElementById('hwContent').addEventListener('click', e => {
+  const btn = e.target.closest('.review-btn, .comment-btn');
+  if (!btn) return;
+  openDrawer(
+    parseInt(btn.dataset.id), btn.dataset.source || 'lesson_hw',
+    btn.dataset.student, btn.dataset.block || '',
+    btn.dataset.lesson, btn.dataset.answer, btn.dataset.comment
+  );
+});
+
+loadAllCourseHomework();
+</script>
+{% endblock %}

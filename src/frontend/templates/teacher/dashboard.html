@@ -145,7 +145,7 @@ let firstCourseWithPending = null;
 
 function goToReviews() {
   const target = firstCourseWithPending || courseIds[0];
-  if (target) window.location = `/teacher/course/${target}`;
+  window.location = target ? `/teacher/homework?course=${target}` : '/teacher/homework';
 }
 </script>
 {% endblock %}

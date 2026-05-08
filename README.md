@@ -65,7 +65,8 @@ Educational-platform_prog_tech/src
 ├── backend/
 │   ├── app.py               # Flask-приложение: маршруты, API, логика, инициализация БД
 │   ├── database.py          # Подключение к SQLite через контекст приложения Flask
-│   ├── stats_export.py      # Генерация Excel-отчёта по прогрессу студентов
+│   ├── stats_export.py      # Генерация краткого Excel-отчёта по прогрессу студентов
+│   ├── detailed_stats_export.py      # Генерация подробного Excel-отчёта по прогрессу студентов
 │   ├── materials/           # Хранилище PDF-файлов для заданий
 │   └── instance/
 │       └── learning_platform.db   # SQLite база данных (создаётся автоматически)
@@ -94,6 +95,7 @@ Educational-platform_prog_tech/src
 │           ├── builder.html         # Конструктор курсов
 │           ├── students.html        # Список студентов
 │           ├── requests.html        # Заявки на курсы
+│           ├── homework.html        # Проверка заданий
 │           └── catalog_view.html    # Каталог (вид преподавателя)
 │
 ├── .gitignore
@@ -186,6 +188,7 @@ POST   /api/teacher/requests/<id>/reject
 
 # Экспорт статистики
 GET  /api/teacher/courses/<id>/stats/export   Скачать Excel-отчёт по курсу
+
 
 # Прохождение курса
 GET  /api/courses/<id>/sections

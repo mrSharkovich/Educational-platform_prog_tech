@@ -6,6 +6,7 @@ from flask import (Flask, render_template, request, redirect,
                    send_file)
 from database import get_db, init_app
 from stats_export import build_course_stats_xlsx
+from detailed_stats_export import build_detailed_stats_xlsx
 
 app = Flask(__name__,
             template_folder='../frontend/templates',
@@ -92,6 +93,11 @@ def teacher_dashboard():
         'SELECT * FROM courses WHERE teacher_id=? ORDER BY id DESC', (g.teacher['id'],)
     ).fetchall()
     return render_template('teacher/dashboard.html', teacher=g.teacher, courses=courses)
+
+@app.route('/teacher/homework')
+def teacher_homework_page():
+    if g.teacher is None: return redirect(url_for('teacher_login_page'))
+    return render_template('teacher/homework.html', teacher=g.teacher)
 
 @app.route('/teacher/course/<int:course_id>')
 def teacher_course(course_id):
@@ -451,7 +457,7 @@ def api_teacher_delete_block(block_id):
     return jsonify({'success': True})
 
 
-# ── Block items: lessons ──────────────────────────────────────
+
 
 @app.route('/api/teacher/blocks/<int:block_id>/items/lesson', methods=['POST'])
 def api_teacher_add_lesson(block_id):
@@ -509,7 +515,7 @@ def api_teacher_update_lesson(lesson_id):
     return jsonify({'success': True})
 
 
-# ── Block items: tasks ────────────────────────────────────────
+
 
 @app.route('/api/teacher/blocks/<int:block_id>/items/task', methods=['POST'])
 def api_teacher_add_task(block_id):
@@ -577,7 +583,7 @@ def api_teacher_delete_item(item_id):
     return jsonify({'success': True})
 
 
-# ── Old lessons API (still used for student course view) ──────
+
 
 @app.route('/api/teacher/courses/<int:course_id>/lessons', methods=['GET'])
 def api_teacher_lessons(course_id):
@@ -829,6 +835,27 @@ def api_teacher_stats_export(course_id):
         return jsonify({'error': 'Not found'}), 404
     try:
         xlsx_bytes, filename = build_course_stats_xlsx(db, course_id)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    import io
+    return send_file(
+        io.BytesIO(xlsx_bytes),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/api/teacher/courses/<int:course_id>/stats/export/detailed')
+def api_teacher_stats_export_detailed(course_id):
+    err = _require_teacher()
+    if err: return err
+    db = get_db()
+    if not db.execute('SELECT 1 FROM courses WHERE id=? AND teacher_id=?',
+                      (course_id, g.teacher['id'])).fetchone():
+        return jsonify({'error': 'Not found'}), 404
+    try:
+        xlsx_bytes, filename = build_detailed_stats_xlsx(db, course_id)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     import io
@@ -1242,7 +1269,7 @@ def check_and_create_tables(db):
 def seed_default_data(db):
     """Insert default demo data if it doesn't already exist."""
 
-    # ── Teacher t1 ──────────────────────────────────────────────
+
     t1 = db.execute("SELECT id FROM teachers WHERE login='t1'").fetchone()
     if not t1:
         t1_id = db.execute(
@@ -1252,7 +1279,7 @@ def seed_default_data(db):
     else:
         t1_id = t1['id']
 
-    # ── Students ─────────────────────────────────────────────────
+
     s1 = db.execute("SELECT id FROM users WHERE login='st1'").fetchone()
     if not s1:
         s1_id = db.execute(
@@ -1271,7 +1298,7 @@ def seed_default_data(db):
     else:
         s2_id = s2['id']
 
-    # ── Helper: create a course with one block + lesson + 3 tasks ──
+
     def make_course(title, description, is_open):
         existing = db.execute("SELECT id FROM courses WHERE title=? AND teacher_id=?",
                               (title, t1_id)).fetchone()
@@ -1289,7 +1316,7 @@ def seed_default_data(db):
             (course_id, 'Блок 1')
         ).lastrowid
 
-        # 1. Урок 1
+
         lesson_id = db.execute(
             "INSERT INTO lessons (title,content,home_work,order_index,course_id) VALUES (?,?,0,1,?)",
             ('Урок 1', '1', course_id)
@@ -1300,7 +1327,6 @@ def seed_default_data(db):
             (block_id, 'lesson', lesson_id, 'Урок 1')
         )
 
-        # 2. Задание: развёрнутый ответ
         task1_id = db.execute(
             "INSERT INTO tasks (course_id,question,task_type,options,correct_answer,max_attempts) "
             "VALUES (?,?,?,?,?,100)",
@@ -1312,7 +1338,6 @@ def seed_default_data(db):
             (block_id, 'task', task1_id, '1')
         )
 
-        # 3. Задание: краткий ответ
         task2_id = db.execute(
             "INSERT INTO tasks (course_id,question,task_type,options,correct_answer,max_attempts) "
             "VALUES (?,?,?,?,?,100)",
@@ -1324,7 +1349,6 @@ def seed_default_data(db):
             (block_id, 'task', task2_id, '123')
         )
 
-        # 4. Задание: тест (выбор)
         task3_id = db.execute(
             "INSERT INTO tasks (course_id,question,task_type,options,correct_answer,max_attempts) "
             "VALUES (?,?,?,?,?,100)",
@@ -1342,7 +1366,7 @@ def seed_default_data(db):
     open_course_id   = make_course('Open Course 1',   'Open Course 1',   is_open=True)
     closed_course_id = make_course('Closed Course 1', 'Closed Course 1', is_open=False)
 
-    # ── Enrol students ────────────────────────────────────────────
+
     db.execute("INSERT OR IGNORE INTO user_courses (user_id,course_id) VALUES (?,?)",
                (s1_id, open_course_id))
     db.execute("INSERT OR IGNORE INTO user_courses (user_id,course_id) VALUES (?,?)",
